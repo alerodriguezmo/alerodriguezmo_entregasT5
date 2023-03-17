@@ -31,21 +31,21 @@ int main(void)
 
 	// Configurando en el modo salida
 	GPIOA->MODER &= ~(0b11 << 10);	// Limpieza
-	GPIOA->MODER &= (0b11 << 10);	// Escritura
+	GPIOA->MODER |= (0b11 << 10);	// Escritura
 
 	// Configurando el tipo de salida
 	GPIOA->OTYPER &= ~(1 << 5);		// Limpieza y configuración
 
 	// Configurando la velocidad
 	GPIOA->OSPEER &= ~(0b11 << 10);	//Limpieza
-	GPIOA->OSPEER &= (0b11 << 10);	// Escritura
+	GPIOA->OSPEER |= (0b11 << 10);	// Escritura
 
 	// Configurando pull-up/pull-down
 	GPIOA->PUPDR &= ~(0b11 << 10);	// No PUPD
 
 	// Dándole salida al pin
 	GPIOA->ODR &= ~(1 << 5);		// Limpiamos la salida PAS, apaga el led
-	GPIOA->ODR &= (1 << 5);			// LED encendido!
+	GPIOA->ODR |= (1 << 5);			// LED encendido!
 
 
     /* Loop forever */
