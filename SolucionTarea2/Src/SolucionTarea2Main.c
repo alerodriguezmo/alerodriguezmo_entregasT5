@@ -35,12 +35,43 @@
 
 
 
+/*  + + + + + = = = = = PUNTO 2 = = = = = + + + + +
+ *
+ * Se define la función GPIOxTooglePin en el archivo "GPIOxDriver.c", pues es una función que se va a utilizar de manera regular.
+ * Para ver el desarrollo de la misma, referise al archivo mencionado.
+ *
+ */
+
+
+
+// Definición de un elemento
+GPIO_Handler_t handlerLed = {0}; // PA5
 
 int main(void)
 {
+	// Configurando el LED_2 -> PA5
+	handlerLed.pGPIOx									= GPIOA;
+	handlerLed.GPIO_PinConfig.GPIO_PinNumber			= PIN_5;
+	handlerLed.GPIO_PinConfig.GPIO_PinMode				= GPIO_MODE_OUT;
+	handlerLed.GPIO_PinConfig.GPIO_PinOPType			= GPIO_OTYPE_PUSHPULL;
+	handlerLed.GPIO_PinConfig.GPIO_PinSpeed				= GPIO_OSPEED_FAST;
+	handlerLed.GPIO_PinConfig.GPIO_PinPuPdControl		= GPIO_PUPDR_NOTHING;
+
+	// Cargamos la configuración del PinA5
+	GPIO_Config(&handlerLed);
+
+	GPIO_WritePin(&handlerLed, SET);
+
     /* Loop forever */
 	while(1){
-		NOP();
+		GPIOxTooglePin(&handlerLed);
+
+		for(int i = 0; i < 2000000 ; i++){
+			NOP();
+
+		}
+
 	}
 
+	return 0;
 }

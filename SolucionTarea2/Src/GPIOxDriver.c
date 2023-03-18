@@ -61,7 +61,7 @@ void GPIO_Config (GPIO_Handler_t *pGPIOHandler){
 
 	// Antes de cargar el nuevo valor, limpiamos los bits específicos de ese registro (debemos escribir 0b00)
 	// para lo cual aplicamos una máscara y una operación bitwise AND
-	pGPIOHandler->MODER &= ~(0b11 << 2 * pGPIOHandler->GPIO_PinConfig.GPIO_PinNumber);
+	pGPIOHandler->pGPIOx->MODER &= ~(0b11 << 2 * pGPIOHandler->GPIO_PinConfig.GPIO_PinNumber);
 
 	// Cargamos a auxConfig en el registro MODER
 	pGPIOHandler->pGPIOx->MODER |= auxConfig;
@@ -131,7 +131,7 @@ void GPIO_WritePin(GPIO_Handler_t *pPinHandler, uint8_t newState){
 	}
 	else {
 		// Trabajando con la parte alta del registro
-		PinHandler->pGPIOx->BSRR |= (SET << pPinHandler->GPIO_PinConfig.GPIO_PinNumber + 16);
+		pPinHandler->pGPIOx->BSRR |= ((SET << pPinHandler->GPIO_PinConfig.GPIO_PinNumber) + (16));
 	}
 
 }
@@ -146,26 +146,21 @@ uint32_t GPIO_ReadPin(GPIO_Handler_t *pPinHandler){
 	// Cargamos el valor del registro IDR, desplazado a la derecha tantas veces como la ubicación
 	// del pin específico
 	pinValue = (pPinHandler->pGPIOx->IDR >> pPinHandler->GPIO_PinConfig.GPIO_PinNumber);
+
+	// Se aplica la máscara correspondiente para obtener el valor del primer bit, justo
+	// como se menciona en la solución del punto 1 que está en el archivo "SolucionTarea2Main.c"
+	pinValue &= 1;
+
 	return pinValue;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/*
+ * Función para cambiar el estado de un PinX seleccionado en el handler y debidamente configurado,
+ * mencionada en el punto 2 de la tarea.
+ */
+void GPIOxTooglePin(GPIO_Handler_t *pPinHandler){
+	// Aplicamos XOR al estado del pin
+	pPinHandler->pGPIOx->ODR ^= (1 << pPinHandler->GPIO_PinConfig.GPIO_PinNumber);
 
 }
 

@@ -41,15 +41,29 @@ void BasicTimer_Config(BasicTimer_Handler_t *ptrBTimerHandler){
 
 		// Activando señal de reloj para TIM2
 		RCC->APB1ENR |= (RCC_APB1ENR_TIM2EN);
-	}
-	else if(ptrBTimerHandler->ptrTIMx == TIM3){
+
+	} else if(ptrBTimerHandler->ptrTIMx == TIM3){
 		// Limpieza del bit
 		RCC->APB1ENR &= ~(RCC_APB1ENR_TIM3EN);
 
-		// Activando señal de reloj para TIM2
+		// Activando señal de reloj para TIM3
 		RCC->APB1ENR |= (RCC_APB1ENR_TIM3EN);
-	}
-	else{
+
+	} else if(ptrBTimerHandler->ptrTIMx == TIM4){
+		// Limpieza del bit
+		RCC->APB1ENR &= ~(RCC_APB1ENR_TIM4EN);
+
+		// Activando señal de reloj para TIM4
+		RCC->APB1ENR |= (RCC_APB1ENR_TIM4EN);
+
+	} else if(ptrBTimerHandler->ptrTIMx == TIM5){
+		// Limpieza del bit
+		RCC->APB1ENR &= ~(RCC_APB1ENR_TIM5EN);
+
+		// Activando señal de reloj para TIM5
+		RCC->APB1ENR |= (RCC_APB1ENR_TIM5EN);
+
+	} else {
 		__NOP();
 	}
 
@@ -66,6 +80,12 @@ void BasicTimer_Config(BasicTimer_Handler_t *ptrBTimerHandler){
 	} else if(ptrBTimerHandler->ptrTIMx == TIM3){
 		TIM3->PSC = ptrBTimerHandler->TIMx_Config.TIMx_speed;
 
+	} else if(ptrBTimerHandler->ptrTIMx == TIM4){
+		TIM4->PSC = ptrBTimerHandler->TIMx_Config.TIMx_speed;
+
+	} else if(ptrBTimerHandler->ptrTIMx == TIM5){
+		TIM5->PSC = ptrBTimerHandler->TIMx_Config.TIMx_speed;
+
 	} else{
 		__NOP();
 	}
@@ -77,14 +97,24 @@ void BasicTimer_Config(BasicTimer_Handler_t *ptrBTimerHandler){
 		// Configurar el registro que nos controla el modo up or down para el TIM utilizado
 		if(ptrBTimerHandler->ptrTIMx == TIM2){
 			// Limpieza del bit
-			TIM2->CR1 &= ~(1 << 4);
+			TIM2->CR1 &= ~(0 << 4);
 			// Escritura
-			TIM2->CR1 |= (1 << 4);
+			TIM2->CR1 |= (0 << 4);
 		} else if(ptrBTimerHandler->ptrTIMx == TIM3){
 			// Limpieza del bit
-			TIM3->CR1 &= ~(1 << 4);
+			TIM3->CR1 &= ~(0 << 4);
 			// Escritura
-			TIM3->CR1 |= (1 << 4);
+			TIM3->CR1 |= (0 << 4);
+		} else if(ptrBTimerHandler->ptrTIMx == TIM4){
+			// Limpieza del bit
+			TIM4->CR1 &= ~(0 << 4);
+			// Escritura
+			TIM4->CR1 |= (0 << 4);
+		} else if(ptrBTimerHandler->ptrTIMx == TIM5){
+			// Limpieza del bit
+			TIM5->CR1 &= ~(0 << 4);
+			// Escritura
+			TIM5->CR1 |= (0 << 4);
 		} else{
 			__NOP();
 		}
@@ -93,13 +123,22 @@ void BasicTimer_Config(BasicTimer_Handler_t *ptrBTimerHandler){
 		ptrBTimerHandler->ptrTIMx->ARR = ptrBTimerHandler->TIMx_Config.TIMx_period - 1;
 
 		/* 3c. Reiniciamos el registro counter*/
+		// Establecemos una variable para guardar el estado de las flags
+		uint16_t flagStatus = 0;
+		// Accedemos al counter del respectivo timer y lo hacemos igual a cero cuando
+		// alcance el valor guardado en el ARR
+		if(ptrBTimerHandler->ptrTIMx == TIM2){
+			// Obtenemos el valor del flag desde el respectivo Status Register (TIMx_SR)
+			flagStatus = TIM2->SR & (1);
+
+
+			}
+		}
 		/* Escriba codigo aca */
 
-	}else{
+	} else{
 		/* 3a. Estamos en DOWN_Mode, el limite se carga en ARR (0) y se comienza en un valor alto
 		 * Trabaja contando en direccion descendente*/
-		/* Escriba codigo aca */
-
 		/* 3b. Configuramos el Auto-reload. Este es el "limite" hasta donde el CNT va a contar
 		 * En modo descendente, con numero positivos, cual es el minimi valor al que ARR puede llegar*/
 		/* Escriba codigo aca */

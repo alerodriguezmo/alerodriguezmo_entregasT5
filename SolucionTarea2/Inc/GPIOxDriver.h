@@ -40,6 +40,7 @@ typedef struct
 /* Definción de las cabeceras de las funciones del GPIOxDriver */
 void GPIO_Config (GPIO_Handler_t *pGPIOHandler);
 void GPIO_WritePin(GPIO_Handler_t *pPinHandler, uint8_t newState);
+void GPIOxTooglePin(GPIO_Handler_t *pPinHandler);
 uint32_t GPIO_ReadPin(GPIO_Handler_t *pPinHandler);
 
 #endif /* GPIOXDRIVER_H_ */

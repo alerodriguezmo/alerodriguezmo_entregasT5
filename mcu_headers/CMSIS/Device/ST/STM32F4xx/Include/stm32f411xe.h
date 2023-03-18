@@ -4275,7 +4275,7 @@ typedef struct
 
 /********************  Bit definition for RCC_AHB1ENR register  ***************/
 #define RCC_AHB1ENR_GPIOAEN_Pos            (0U)               0x1UL << RCC_AHB1
-#define RCC_AHB1ENR_GPIOAEN_Msk            (ENR_GPIOAEN_Pos)   /*!< 0x00000001 */
+#define RCC_AHB1ENR_GPIOAEN_Msk            (RCC_AHB1ENR_GPIOAEN_Pos)   /*!< 0x00000001 */
 #define RCC_AHB1ENR_GPIOAEN                RCC_AHB1ENR_GPIOAEN_Msk             
 #define RCC_AHB1ENR_GPIOBEN_Pos            (1U)                                
 #define RCC_AHB1ENR_GPIOBEN_Msk            (0x1UL << RCC_AHB1ENR_GPIOBEN_Pos)   /*!< 0x00000002 */
