@@ -149,7 +149,7 @@ uint32_t GPIO_ReadPin(GPIO_Handler_t *pPinHandler){
 
 	// Se aplica la máscara correspondiente para obtener el valor del primer bit, justo
 	// como se menciona en la solución del punto 1 que está en el archivo "SolucionTarea2Main.c"
-	pinValue &= 1;
+	pinValue &= (1 << 0);
 
 	return pinValue;
 }
@@ -159,8 +159,10 @@ uint32_t GPIO_ReadPin(GPIO_Handler_t *pPinHandler){
  * mencionada en el punto 2 de la tarea.
  */
 void GPIOxTooglePin(GPIO_Handler_t *pPinHandler){
-	// Aplicamos XOR al estado del pin
-	pPinHandler->pGPIOx->ODR ^= (1 << pPinHandler->GPIO_PinConfig.GPIO_PinNumber);
+	// Se encuentra el contrario del estado del pin usando la operación XOR y se almacena en una variable
+	uint8_t inverse = GPIO_ReadPin(pPinHandler) ^ (1);
+	//Establece el pin en su estado contrario
+	GPIO_WritePin(pPinHandler, inverse);
 
 }
 
