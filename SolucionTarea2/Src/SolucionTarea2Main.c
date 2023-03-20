@@ -130,11 +130,10 @@ int main(void){
 	handlerPA7.GPIO_PinConfig.GPIO_PinSpeed				= GPIO_OSPEED_MEDIUM;
 	handlerPA7.GPIO_PinConfig.GPIO_PinAltFunMode		= AF0;
 
-	// Parámetros para la configuración del PC13
+	// Parámetros para la configuración del PC13 (botón)
 	handlerPC13.pGPIOx									= GPIOC;
 	handlerPC13.GPIO_PinConfig.GPIO_PinNumber			= PIN_13;
 	handlerPC13.GPIO_PinConfig.GPIO_PinMode				= GPIO_MODE_IN;
-	handlerPC13.GPIO_PinConfig.GPIO_PinOPType			= GPIO_OTYPE_PUSHPULL;
 	handlerPC13.GPIO_PinConfig.GPIO_PinPuPdControl		= GPIO_PUPDR_NOTHING;
 	handlerPC13.GPIO_PinConfig.GPIO_PinSpeed			= GPIO_OSPEED_MEDIUM;
 	handlerPC13.GPIO_PinConfig.GPIO_PinAltFunMode		= AF0;
@@ -167,7 +166,7 @@ int main(void){
 	uint32_t C6					= 0;
 	uint32_t C7					= 0;
 
-	// Variable que lee y se almacena el estado del PC13, que es el botón del usuario.
+	// Variable que almacena el estado del PC13, que es el botón del usuario.
 	uint8_t state;
 
 
@@ -204,7 +203,6 @@ int main(void){
 		C5 			= (mainCounter >> 4) & (1);
 		C6 			= (mainCounter >> 5) & (1);
 		C7 			= (mainCounter >> 6) & (1);
-		state 		= GPIO_ReadPin(&handlerPC13);
 
 		// Se apagan y se prenden los pines/LEDs a conveniencia
 		GPIO_WritePin(&handlerPA7, C1);
@@ -214,6 +212,9 @@ int main(void){
 		GPIO_WritePin(&handlerPB8, C5);
 		GPIO_WritePin(&handlerPC6, C6);
 		GPIO_WritePin(&handlerPC9, C7);
+
+		// Lectura del estado del botón de usuario
+		state 		= GPIO_ReadPin(&handlerPC13);
 
 		// Esta línea incluye la acción del usuario en el programa. Si el botón está presionado,
 		// la variable state es 0. En caso contrario es 1
