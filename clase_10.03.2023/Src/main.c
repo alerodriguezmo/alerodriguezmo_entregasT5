@@ -31,7 +31,7 @@ int main(void)
 
 	// Configurando en el modo salida
 	GPIOA->MODER &= ~(0b11 << 10);	// Limpieza
-	GPIOA->MODER |= (0b11 << 10);	// Escritura
+	GPIOA->MODER |= (0b01 << 10);	// Escritura
 
 	// Configurando el tipo de salida
 	GPIOA->OTYPER &= ~(1 << 5);		// Limpieza y configuración
@@ -48,8 +48,4 @@ int main(void)
 	GPIOA->ODR |= (1 << 5);			// LED encendido!
 
 
-    /* Loop forever */
-	while(1){
-
-	}
 }

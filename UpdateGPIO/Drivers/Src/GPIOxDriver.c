@@ -29,7 +29,7 @@ void GPIO_Config (GPIO_Handler_t *pGPIOHandler){
 	// Verificamos para GPIOA
 	if(pGPIOHandler->pGPIOx == GPIOA){
 		// Escribimos 1 (SET) en la posición correspondiente al GPIOA
-		RCC->AHB1ENR |= (RCC_AHB1ENR_GPIOAEN);
+		RCC->AHB1ENR |= (RCC_AHB1ENR_GIPOAEN);
 
 	} else if(pGPIOHandler->pGPIOx == GPIOB){
 		// Escribimos 1 (SET) en la posición correspondiente al GPIOB
@@ -83,7 +83,7 @@ void GPIO_Config (GPIO_Handler_t *pGPIOHandler){
 	pGPIOHandler->pGPIOx->OSPEEDR &= ~(0b11 << 2 * pGPIOHandler->GPIO_PinConfig.GPIO_PinNumber);
 
 	// Cargamos el resultado sobre el registro adecuado
-	pGPIOHandler->pGPIOx->OSPEEDR|= auxConfig;
+	pGPIOHandler->pGPIOx->OSPEEDR |= auxConfig;
 
 	// 5) Configurando si se desea pull-up, pull-down o flotante
 	auxConfig = (pGPIOHandler->pGPIOx->PUPDR << 2*pGPIOHandler->GPIO_PinConfig.GPIO_PinNumber);
@@ -113,7 +113,7 @@ void GPIO_Config (GPIO_Handler_t *pGPIOHandler){
 		pGPIOHandler->pGPIOx->AFR[1] &= ~(0b1111 << auxPosition);
 
 		// Y escribimos el valor configurado en la posición seleccionada
-				pGPIOHandler->pGPIOx->AFR[1] |= (pGPIOHandler->GPIO_PinConfig.GPIO_PinAltFunMode << auxPosition);
+		pGPIOHandler->pGPIOx->AFR[1] |= (pGPIOHandler->GPIO_PinConfig.GPIO_PinAltFunMode << auxPosition);
 	}
 } // FIN del GPIO_config
 
@@ -131,7 +131,7 @@ void GPIO_WritePin(GPIO_Handler_t *pPinHandler, uint8_t newState){
 	}
 	else {
 		// Trabajando con la parte alta del registro
-		pPinHandler->pGPIOx->BSRR |= (SET << (pPinHandler->GPIO_PinConfig.GPIO_PinNumber + 16));
+		pPinHandler->pGPIOx->BSRR |= ((SET << pPinHandler->GPIO_PinConfig.GPIO_PinNumber) + (16));
 	}
 
 }
@@ -147,7 +147,22 @@ uint32_t GPIO_ReadPin(GPIO_Handler_t *pPinHandler){
 	// del pin específico
 	pinValue = (pPinHandler->pGPIOx->IDR >> pPinHandler->GPIO_PinConfig.GPIO_PinNumber);
 
+	// Se aplica la máscara correspondiente para obtener el valor del primer bit, justo
+	// como se menciona en la solución del punto 1 que está en el archivo "SolucionTarea2Main.c"
+	pinValue &= (1 << 0);
+
 	return pinValue;
 }
 
+/*
+ * Función para cambiar el estado de un PinX seleccionado en el handler y debidamente configurado,
+ * mencionada en el punto 2 de la tarea.
+ */
+void GPIOxTooglePin(GPIO_Handler_t *pPinHandler){
+	// Se encuentra el contrario del estado del pin usando la operación XOR y se almacena en una variable
+	uint8_t inverse = GPIO_ReadPin(pPinHandler) ^ (1);
+	//Establece el pin en su estado contrario
+	GPIO_WritePin(pPinHandler, inverse);
+
+}
 

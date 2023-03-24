@@ -20,40 +20,28 @@
 #include <stdint.h>
 #include "GPIOxDriver.h"
 
-// Función TooglePin
-void GPIOxTooglePin(GPIO_Handler_t *pPinHandler){
-	// Usamos una compuerta XOR en el estado del pin:
-	pPinHandler->pGPIOx->MODER ^= (1 << pPinHandler->GPIO_PinConfig.GPIO_PinNumber);
-
-}
-
 // Definición de un elemento
-GPIO_Handler_t handlerLed = {0}; // PA5
+GPIO_Handler_t	handlerLed2 = {0}; // PA5
 
-int main(void)
-{
-	// Configurando el LED_2 -> PA5
-	handlerLed.pGPIOx									= GPIOA;
-	handlerLed.GPIO_PinConfig.GPIO_PinNumber			= PIN_5;
-	handlerLed.GPIO_PinConfig.GPIO_PinMode				= GPIO_MODE_OUT;
-	handlerLed.GPIO_PinConfig.GPIO_PinOPType			= GPIO_OTYPE_PUSHPULL;
-	handlerLed.GPIO_PinConfig.GPIO_PinSpeed				= GPIO_OSPEED_FAST;
-	handlerLed.GPIO_PinConfig.GPIO_PinPuPdControl		= GPIO_PUPDR_NOTHING;
+int main(void){
+	// Configurando el LED 2 -> PA5
+	handlerLed2.pGPIOx								= GPIOA;
+	handlerLed2.GPIO_PinConfig.GPIO_PinNumber		= PIN_5;
+	handlerLed2.GPIO_PinConfig.GPIO_PinMode			= GPIO_MODE_OUT;
+	handlerLed2.GPIO_PinConfig.GPIO_PinOPType		= GPIO_OTYPE_PUSHPULL;
+	handlerLed2.GPIO_PinConfig.GPIO_PinSpeed		= GPIO_OSPEED_FAST;
+	handlerLed2.GPIO_PinConfig.GPIO_PinPuPdControl	= GPIO_PUPDR_NOTHING;
 
-	// Cargamos la configuración del PinA5
-	GPIO_Config(&handlerLed);
+	// Cargamos la configuración del pin A5
+	GPIO_Config(&handlerLed2);
 
-	GPIO_WritePin(&handlerLed, SET);
-
-    /* Loop forever */
+	GPIO_WritePin(&handlerLed2, SET);
 	while(1){
-		GPIOxTooglePin(&handlerLed);
+		GPIOxTooglePin(&handlerLed2);
 
-		for(int i = 0; i < 2000000 ; i++){
+		for(int i=0; i < 2000000 ; i++){
 			__NOP();
 		}
 
 	}
-
-	return 0;
 }

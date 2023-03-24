@@ -20,12 +20,10 @@
 #include <stdint.h>
 
 
-int main(void)
-{
-    /* Loop forever */
+
+
+int main(void){
 	while(1){
 
 	}
-
-	return 0;
 }
