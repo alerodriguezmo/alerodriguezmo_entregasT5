@@ -51,7 +51,7 @@ void init_Hardware(void){
 	handlerBlinkyTimer.ptrTIMx								= TIM2;
 	handlerBlinkyTimer.TIMx_Config.TIMx_mode				= BTIMER_MODE_UP;
 	handlerBlinkyTimer.TIMx_Config.TIMx_speed				= BTIMER_SPEED_1ms;
-	handlerBlinkyTimer.TIMx_Config.TIMx_period				= 300; // Lanza una interrupción cada 300ms
+	handlerBlinkyTimer.TIMx_Config.TIMx_period				= 1000; // Lanza una interrupción cada 300ms
 	handlerBlinkyTimer.TIMx_Config.TIMx_interruptEnable		= 1;
 
 	// Cargando la configuración del TIM2
