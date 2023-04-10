@@ -621,17 +621,17 @@ void callback_extInt15(void){
 	else{
 		//CCW para el modo culebrita
 		if(!stateB){
-			if(snakeCounter == 0){
-				snakeCounter = 13;
-			}
 			snakeCounter--;
+			if(snakeCounter == 0){
+				snakeCounter = 12;
+			}
 		}
 		//CW para el modo culebrita
 		else{
-			if(snakeCounter == 13){
-				snakeCounter = 0;
-			}
 			snakeCounter++;
+			if(snakeCounter == 13){
+				snakeCounter = 1;
+			}
 		}
 	}
 }
