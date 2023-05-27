@@ -1,117 +1,88 @@
 /*
- * SysTickDriver.c
+ *************************************************************************
+ * @file		: SysTickDriver.c
+ * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @brief		: Archivo de fuente del driver del SysTick
  *
- *  Created on: 26/04/2023
- *      Author: alerodriguezmo
- *
- * 	Este driver controla el TImer que trae por defecto todo procesador ARM Cortex Mx,
- * 	el cual hace parte del sistema independiente de la empresa fabricante del MCU.
- *
- * 	Para encontrar cuál es su registro de configuración, debemos utilizar el manuel
- * 	genérico del procesador Cortex-M4, ya que es allí donde se encuentra la documentación
- * 	para este periférico.
- *
- * 	En el archivo core_cm4.h, la estructura que define el periférico se llama SysTick_Type
- *
+ *************************************************************************
  */
+
 
 #include <stm32f4xx.h>
 #include "SysTickDriver.h"
 
-uint64_t ticks = 0;
-uint64_t ticks_start = 0;
+uint64_t ticks 			= 0;
+uint64_t ticks_start 	= 0;
 uint64_t ticks_counting = 0;
 
-/** Función de configuracíon del SysTick */
 void config_SysTick_ms(uint8_t systemClock){
-
-	// Reiniciamos el valor de la variable que cuenta tiempo
+	//Se resetea el contador
 	ticks = 0;
-
+	//Cargando el valor del limite de incrementos que representan 1ms
 	switch(systemClock){
-
-	// Caso para el reloj HSI a 16MHz
-	case 0: {
-		SysTick->LOAD = SYSTICK_LOAD_VALUE_16MHz;
+	//Clock HSI->16MHz
+	case 0:{
+		SysTick->LOAD = SYSTICK_LOAD_VALUE_16MHz_1ms;
+		break;
+	}
+	//HSE Clock
+	case 1:{
+		SysTick->LOAD = SYSTICK_LOAD_VALUE_16MHz_1ms;
+		break;
+	}
+	//PLL Clock at 100MHz
+	case 2:{
+		SysTick->LOAD = SYSTICK_LOAD_VALUE_100MHz_1ms;
+		break;
+	}
+	//PLL Clock at 80MHz
+	case 3:{
+		SysTick->LOAD = 80000;
+		break;
+	}
+	default:
+		SysTick->LOAD = SYSTICK_LOAD_VALUE_16MHz_1ms;
 		break;
 	}
 
-	// Caso	para el reloj HSE
-	case 1: {
-		SysTick->LOAD = SYSTICK_LOAD_VALUE_16MHz;
-		break;
-	}
-
-	// Caso para el reloj PLL a 100Mhz
-	case 2: {
-		SysTick->LOAD = SYSTICK_LOAD_VALUE_100MHz;
-		break;
-	}
-	// Caso por defecto
-	default: {
-		SysTick->LOAD = SYSTICK_LOAD_VALUE_16MHz;
-		break;
-	}
-
-	} // Fin del switch-case
-
-
-	// Limpiamos el valor actual de SysTick
+	//Se limpia el valor actual del SysTick
 	SysTick->VAL = 0;
 
-	// Configuramos el reloj interno como el reloj para el Timer
+	//SE CONFIGURA RELOJ INTERNO COMO RELOJ PARA EL TIMER
 	SysTick->CTRL |= SysTick_CTRL_CLKSOURCE_Msk;
-
-	// Desactivamos las interrupciones globales
+	//Se desactivan las interrupciones globales
 	__disable_irq();
-
-	// Matriculamos la interrupcíon en el NVIC
+	//Se matricula la interrupción en el NVIC
 	NVIC_EnableIRQ(SysTick_IRQn);
-
-	// Activamos la interrupción debida al conteo a cero del SysTick
+	//Se activa la interrupción debida al conteo a cero del SysTick
 	SysTick->CTRL |= SysTick_CTRL_TICKINT_Msk;
-
-	// Activamos el Timer
+	//Se activa el timer
 	SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
-
-	// Activamos de nuevo las interrupciones globales
+	//Se activa interrupciones globales again
 	__enable_irq();
-
 }
 
-/** Función que retorna el valor actual de los ticks, según lo que aumenta con el Handler*/
 uint64_t getTicks_ms(void){
 	return ticks;
 }
 
-/** Funcíon para aplicar un tiempo de delay en milisegundos */
 void delay_ms(uint32_t wait_time_ms){
-
-	// Captura el primer valor de tiempo para comparar
+	//Primer valor de tiempo para comparar
 	ticks_start = getTicks_ms();
-
-	// Captura el segundo valor de tiempo para comparar
+	//Segundo valor de tiempo para comparar
 	ticks_counting = getTicks_ms();
-
-	// Compara: si el valor "counting" es menor que el "strart + wait"
-	// Actualiza el valor "counting"
-	// Repite esta operación  hasta que counting sea mayor (se cumple el tiempo de espera)
-	while(ticks_counting < (ticks_start + (uint64_t)wait_time_ms)){
-
-		// Actualizar el valor
+	//Actualiza el valor de ticks counting hasta que llegue al wait time
+	while(ticks_counting < (ticks_start +(uint64_t)wait_time_ms)){
 		ticks_counting = getTicks_ms();
 	}
 }
 
-/** Handler del SysTick, código que se ejecuta cada vez que el counter llega al valor*/
-void SysTick_Handler(void){
-	// Verficamos que la interrupción se haya lanzado
+void SysTickHandler(void){
+	//Se verifica si la interrupción se lanzó
 	if(SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk){
-
-		// Limpiamos la bandera
+		//Se limpia la bandera
 		SysTick->CTRL &= ~SysTick_CTRL_COUNTFLAG_Msk;
-
-		// Incrementamos en 1 el contador
+		//Incrementa en 1 el contador
 		ticks++;
 	}
 }

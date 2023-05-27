@@ -1,21 +1,27 @@
 /*
- * BasicTimer.h
+ *************************************************************************
+ * @file		: BasicTimer.h
+ * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @brief		: Archivo de cabecera del driver del periférico TIMx
  *
- *  Created on: Mar 24, 2023
- *      Author: alerodriguezmo
+ *************************************************************************
  */
+
 
 #ifndef INC_BASICTIMER_H_
 #define INC_BASICTIMER_H_
 
 #include "stm32f4xx.h"
 
-#define BTIMER_MODE_UP		0
-#define BTIMER_MODE_DOWN	1
+#define BTIMER_MODE_UP				0
+#define BTIMER_MODE_DOWN			1
 
-#define BTIMER_SPEED_10us	160
-#define BTIMER_SPEED_100us	1600
-#define BTIMER_SPEED_1ms	16000
+#define BTIMER_SPEED_10us			160
+#define BTIMER_SPEED_100us			1600
+#define BTIMER_SPEED_1ms			16000
+
+#define BTIMER_INTERRUPT_ENABLE 	1
+#define BTIMER_INTERRUPT_DISABLE 	0
 
 
 
@@ -36,7 +42,10 @@ typedef struct
 }BasicTimer_Handler_t;
 
 void BasicTimer_Config(BasicTimer_Handler_t *ptrBTimerHandler);
-void BasicTimerX_Callback(void); /* Esta función debe ser sobre-escrita en el main para que el sistema funcione*/
+void BasicTimer2_Callback(void); /* Esta función debe ser sobre-escrita en el main para que el sistema funcione*/
+void BasicTimer3_Callback(void);
+void BasicTimer4_Callback(void);
+void BasicTimer5_Callback(void);
 
 
 

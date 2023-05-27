@@ -1,8 +1,10 @@
 /*
- * I2CDriver.h
+ *************************************************************************
+ * @file		: I2CDriver.h
+ * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @brief		: Archivo de cabecera del driver del periférico I2C
  *
- *  Created on: May 15, 2023
- *      Author: bhartok
+ *************************************************************************
  */
 
 #ifndef INC_I2CDRIVER_H_
@@ -32,6 +34,7 @@ typedef struct
 	uint8_t 	slaveAddress;
 	uint8_t 	modeI2C;
 	uint8_t 	dataI2C;
+	uint8_t		freq;
 }I2C_Handler_t;
 
 

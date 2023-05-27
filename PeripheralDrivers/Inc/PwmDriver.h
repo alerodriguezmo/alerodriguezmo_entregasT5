@@ -1,8 +1,10 @@
 /*
- * PwmDriver.h
+ *************************************************************************
+ * @file		: PwmDriver.h
+ * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @brief		: Archivo de cabecera del driver del periférico PWM
  *
- *  Created on: May 14, 2022
- *      Author: alerodriguezmo
+ *************************************************************************
  */
 
 #ifndef PWMDRIVER_H_
@@ -23,7 +25,7 @@ typedef struct
 {
 	uint8_t		channel; 		// Canal PWM relacionado con el TIMER
 	uint32_t	prescaler;		// A qué velocidad se incrementa el Timer
-	uint16_t	period;			// Indica el número de veces que el Timer se incrementa, el periodo de la frecuencia viene dado por Time_Fosc * PSC * ARR
+	uint16_t	periodo;		// Indica el número de veces que el Timer se incrementa, el periodo de la frecuencia viene dado por Time_Fosc * PSC * ARR
 	uint16_t	duttyCicle;		// Valor en porcentaje (%) del tiempo que la señal está en alto
 }PWM_Config_t;
 
@@ -31,7 +33,7 @@ typedef struct
 typedef struct
 {
 	TIM_TypeDef		*ptrTIMx;	// Timer al que esta asociado el PWM
-	PWM_Config_t	PWM_Config;		// Configuración inicial del PWM
+	PWM_Config_t	config;	// Configuración inicial del PWM
 }PWM_Handler_t;
 
 /* Prototipos de las funciones */
@@ -43,6 +45,5 @@ void updateDuttyCycle(PWM_Handler_t *ptrPwmHandler, uint16_t newDutty);
 void enableOutput(PWM_Handler_t *ptrPwmHandler);
 void startPwmSignal(PWM_Handler_t *ptrPwmHandler);
 void stopPwmSignal(PWM_Handler_t *ptrPwmHandler);
-void setPeriod(PWM_Handler_t *ptrPwmHandler);
 
 #endif /* PWMDRIVER_H_ */

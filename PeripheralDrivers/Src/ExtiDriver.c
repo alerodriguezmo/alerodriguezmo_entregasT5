@@ -1,8 +1,10 @@
 /*
- * ExtiDriver.c
+ *************************************************************************
+ * @file		: ExtiDriver.c
+ * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @brief		: Archivo de fuente del driver de las exti
  *
- *  Created on: 28/03/2023
- *      Author: alerodriguezmo
+ *************************************************************************
  */
 
 #include "ExtiDriver.h"
@@ -893,9 +895,9 @@ __attribute__ ((weak)) void callback_extInt15(void){
 	__NOP();
 }
 
-/*
+/* 
  * Agregar TODOS los demas callbacks (del 1 al 15) para un total
- * de  16 posibles interrupciones
+ * de  16 posibles interrupciones 
  */
 
 
@@ -1034,3 +1036,5 @@ void EXTI15_10_IRQHandler(void){
 
 	}
 }
+
+

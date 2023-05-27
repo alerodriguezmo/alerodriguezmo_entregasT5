@@ -1,11 +1,10 @@
 /*
- * GPIOxDriver.h
+ *************************************************************************
+ * @file		: GPIOxDriver.h
+ * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @brief		: Archivo de cabecera del driver del periférico GPIOx
  *
- *  Created on: Mar 10, 2023
- *      Author: alerodriguezmo
- *
- *  Este programa se encarga de las definiciones relacionadas únicamente con el
- *  debido manejo y control del periférico GPIOx (funciones del controlador)
+ *************************************************************************
  */
 
 #ifndef GPIOXDRIVER_H_

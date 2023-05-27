@@ -1,13 +1,10 @@
 /*
- * GPIOxDriver.c
+ *************************************************************************
+ * @file		: GPIOxDriver.c
+ * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @brief		: Archivo de fuente del driver del periférico GPIOx
  *
- *  Created on: Mar 10, 2023
- *      Author: alerodriguezmo
- *
- *  Este archivo es la parte del programa donde escribimos adecuadamente el control.
- *  para que sea lo más genérico posible, de forma independiente del puerto GPIO y
- *  el PIN seleccionado, el programa se ejecute y configure todo correctamente.
- *
+ *************************************************************************
  */
 
 #include "GPIOxDriver.h"
@@ -165,4 +162,3 @@ void GPIOxTooglePin(GPIO_Handler_t *pPinHandler){
 	GPIO_WritePin(pPinHandler, inverse);
 
 }
-

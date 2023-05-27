@@ -51,12 +51,15 @@ void init_System(void); 					// Función para inicializar el sistema
 /* = = = = = INICIO DE LA FUNCIÓN PRINCIPAL DEL PROGRAMA = = = = =  */
 int main(void){
 
+	// Activación del coprocesador matemático - FPU
+	SCB->CPACR |= (0XF << 20);
+
 	// Inicialización de todos los elementos del sistema
 	init_System();
 
 	while(1){
 		if(printMsg > 4){
-			writeMsg(&usart2Comm, "Hola mundo!\n");
+			writeMsg(&usart2Comm, "Pelao \n");
 			printMsg = 0;
 		}
 	}
@@ -67,6 +70,7 @@ int main(void){
 
 // Función de inicialización de hardware
 void init_System(void){
+
 
 	/* = = = INICIO DE LA CONFIGURACIÓN DEL LED DE ESTADO (BLINKY) = = = */
 	// Configuración del LED2 - PA5

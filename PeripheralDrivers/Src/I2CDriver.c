@@ -1,8 +1,10 @@
 /*
- * I2CDriver.c
+ *************************************************************************
+ * @file		: I2CDriver.c
+ * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @brief		: Archivo de fuente del driver del periférico I2C
  *
- *  Created on: May 15, 2023
- *      Author: alerodriguezmo
+ *************************************************************************
  */
 
 #include <stdint.h>
@@ -29,22 +31,43 @@ void i2c_config(I2C_Handler_t *ptrHandlerI2C){
 
 	//3. Se indica la velocidad de reloj principal
 	ptrHandlerI2C->ptrI2Cx->CR2 &= ~(0b111111 << I2C_CR2_FREQ_Pos);//Se borra conf anterior
-	ptrHandlerI2C->ptrI2Cx->CR2 |= (MAIN_CLOCK_16MHz_FOR_I2C << I2C_CR2_FREQ_Pos);
+	//Se selecciona dependiendo la frecuencia a la que esté el APB1
+	if(ptrHandlerI2C->freq==40){//Si está a 40MHz
+		ptrHandlerI2C->ptrI2Cx->CR2 |= (40<<I2C_CR2_FREQ_Pos);
+	}else{//Por default es 16MHz
+		ptrHandlerI2C->ptrI2Cx->CR2 |= (MAIN_CLOCK_16MHz_FOR_I2C << I2C_CR2_FREQ_Pos);
+	}
 
 	//4. Se configura el modo I2C en el que sistema funciona
 	ptrHandlerI2C->ptrI2Cx->CCR = 0;
 	ptrHandlerI2C->ptrI2Cx->TRISE = 0;
 
-	if(ptrHandlerI2C->modeI2C == I2C_MODE_SM){
-		//se configura el modo estándar
-		ptrHandlerI2C->ptrI2Cx->CCR &= ~I2C_CCR_FS;
-		ptrHandlerI2C->ptrI2Cx->CCR |= (I2C_MODE_SM_SPEED_100KHz <<I2C_CCR_CCR_Pos);
-		ptrHandlerI2C->ptrI2Cx->TRISE |= I2C_MAX_RISE_TIME_SM;
-	}else{
-		//se configura el modo rápido
-		ptrHandlerI2C->ptrI2Cx->CCR |= I2C_CCR_FS;
-		ptrHandlerI2C->ptrI2Cx->CCR |= (I2C_MODE_FM_SPEED_400KHz <<I2C_CCR_CCR_Pos);
-		ptrHandlerI2C->ptrI2Cx->TRISE |= I2C_MAX_RISE_TIME_FM;
+	if(ptrHandlerI2C->freq == 40){
+		if(ptrHandlerI2C->modeI2C == I2C_MODE_SM){
+			//se configura el modo estándar
+			ptrHandlerI2C->ptrI2Cx->CCR &= ~I2C_CCR_FS;
+			ptrHandlerI2C->ptrI2Cx->CCR |= (200 <<I2C_CCR_CCR_Pos);
+			ptrHandlerI2C->ptrI2Cx->TRISE |= 41;
+		}else{
+			//se configura el modo rápido
+			ptrHandlerI2C->ptrI2Cx->CCR |= I2C_CCR_FS;
+			ptrHandlerI2C->ptrI2Cx->CCR |= (33 <<I2C_CCR_CCR_Pos);
+			ptrHandlerI2C->ptrI2Cx->TRISE |= 13;
+		}
+	}
+	else{
+
+		if(ptrHandlerI2C->modeI2C == I2C_MODE_SM){
+			//se configura el modo estándar
+			ptrHandlerI2C->ptrI2Cx->CCR &= ~I2C_CCR_FS;
+			ptrHandlerI2C->ptrI2Cx->CCR |= (I2C_MODE_SM_SPEED_100KHz <<I2C_CCR_CCR_Pos);
+			ptrHandlerI2C->ptrI2Cx->TRISE |= I2C_MAX_RISE_TIME_SM;
+		}else{
+			//se configura el modo rápido
+			ptrHandlerI2C->ptrI2Cx->CCR |= I2C_CCR_FS;
+			ptrHandlerI2C->ptrI2Cx->CCR |= (I2C_MODE_FM_SPEED_400KHz <<I2C_CCR_CCR_Pos);
+			ptrHandlerI2C->ptrI2Cx->TRISE |= I2C_MAX_RISE_TIME_FM;
+		}
 	}
 
 	// 5. Se activa el módulo I2C
@@ -61,11 +84,12 @@ void i2c_stopTransaction(I2C_Handler_t *ptrHandlerI2C){
 void i2c_startTransaction(I2C_Handler_t *ptrHandlerI2C){
 	//Se verifica que la linea no este busy
 	while(ptrHandlerI2C->ptrI2Cx->SR2 & I2C_SR2_BUSY){
-	__NOP();
+		__NOP();
 	}
 	ptrHandlerI2C->ptrI2Cx->CR1 |= I2C_CR1_START;
-	while(!(ptrHandlerI2C->ptrI2Cx->SR1 & I2C_SR1_SB)){}
-	__NOP();
+	while(!(ptrHandlerI2C->ptrI2Cx->SR1 & I2C_SR1_SB)){
+		__NOP();
+	}
 }
 void i2c_reStartTransaction(I2C_Handler_t *ptrHandlerI2C){
 	ptrHandlerI2C->ptrI2Cx->CR1 |= I2C_CR1_START;
@@ -83,7 +107,7 @@ void i2c_sendAck(I2C_Handler_t *ptrHandlerI2C){
 	ptrHandlerI2C->ptrI2Cx->CR1 |= I2C_CR1_ACK;
 }
 
-void i2c_sendSlaveAddresRW(I2C_Handler_t *ptrHandlerI2C, uint8_t slaveAddress, uint8_t readOrWrite){
+void i2c_sendSlaveAddressRW(I2C_Handler_t *ptrHandlerI2C, uint8_t slaveAddress, uint8_t readOrWrite){
 	// Se define var. aux
 	uint8_t auxByte = 0;
 	(void) auxByte;
