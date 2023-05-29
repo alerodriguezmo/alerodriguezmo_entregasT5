@@ -1,7 +1,9 @@
-/*
- * I2CDriver.h
- *
- *      Author:  Maria Jose Uribe Henao
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : I2CDriver.h
+ * @brief    : Archivo de cabecera del driver del periférico I2C
+ * **************************************************************************************************
  */
 
 

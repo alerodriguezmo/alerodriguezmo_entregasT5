@@ -1,8 +1,9 @@
-/*
- * BasicTimer.h
- *
- *  Created on: Apr 18, 2022
- *      Author: namontoy
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : BasicTimer.h
+ * @brief    : Archivo de cabecera del driver de los TIMx
+ * **************************************************************************************************
  */
 
 #ifndef INC_BASICTIMER_H_

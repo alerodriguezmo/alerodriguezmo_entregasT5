@@ -1,13 +1,9 @@
-/*
- * GPIOxDriver.c
- *
- *  Created on: Mar 10, 2023
- *      Author: majo
- *
- *  Este archivo es la parte del programa donde escribimos adecuadamente el control,
- *  para que sea lo mas generico posible, de forma que independiente del puerto GPIO y
- *  el PIN seleccionados, el programa se ejecute y configure todo correctamente.
- *
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : GPIOx.c
+ * @brief    : Archivo de fuente del driver del periférico GPIOx
+ * **************************************************************************************************
  */
 
 #include "GPIOxDriver.h"

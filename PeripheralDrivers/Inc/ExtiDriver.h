@@ -1,8 +1,9 @@
-/*
- * ExtiDriver.h
- *
- *  Created on: May 10, 2022
- *      Author: namontoy
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : ExtiDriver.h
+ * @brief    : Archivo de cabecera del driver de las EXTI
+ * **************************************************************************************************
  */
 
 #ifndef EXTIDRIVER_H_

@@ -1,6 +1,9 @@
-/*
- * PwmDriver.h
- * Author: Maria Jose Uribe Henao
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : PwmDriver.h
+ * @brief    : Archivo de cabecera del driver del periférico PWM
+ * **************************************************************************************************
  */
 
 #ifndef PWMDRIVER_H_

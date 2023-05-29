@@ -1,8 +1,9 @@
-	/*
- * GPIOxDriver.h
- *
- *  Created on: Mar 10, 2023
- *      Author: majo
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : GPIOx.h
+ * @brief    : Archivo de cabecera del driver del periférico GPIOx
+ * **************************************************************************************************
  */
 
 #ifndef INC_GPIOXDRIVER_H_

@@ -1,8 +1,9 @@
-/*
- * PLLDriver.h
- *
- *  Created on: May 20, 2023
- *      Author: majo
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : PLLDriver.h
+ * @brief    : Archivo de cabecera del driver del periférico PLL
+ * **************************************************************************************************
  */
 
 #ifndef PLLDRIVER_H_

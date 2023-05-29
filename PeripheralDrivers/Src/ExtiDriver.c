@@ -1,8 +1,9 @@
-/*
- * ExtiDriver.c
- *
- *  Created on: XXX, 2022
- *      Author: namontoy
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : ExtiDriver.c
+ * @brief    : Archivo de fuente del driver de las EXTI
+ * **************************************************************************************************
  */
 
 #include "ExtiDriver.h"

@@ -1,17 +1,9 @@
-/*
- * SysTickDriver.c
- *
- *  Created on: May 1, 2023
- *      Author: mauribeh
- *
- *  Este driver controla el Timer que trae por defecto todo procesador ARM Cortex Mx,
- *  el cual hace parte del sistema independiente de la empresa fabricante del MCU.
- *
- *  Para encontrar cual es su registro de configuracion, debemos utilizar el manual generico
- *  del procesador Cortex-M4, ya que es alli donde se encuentra la documentacion para este
- *  periferico
- *
- *  En el archivo core_cm4.h, la estructura que define el periferico se llama SysTick_Type
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : SysTick.c
+ * @brief    : Archivo de fuente del driver del SysTick
+ * **************************************************************************************************
  */
 
 #include <stm32f4xx.h>

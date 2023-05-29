@@ -1,9 +1,11 @@
-/*
- * PwmDriver.c
- *
- *  Created on: 2023
- *      Author: Maria Jose Uribe
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : PwmDriver.c
+ * @brief    : Archivo de fuente del driver del periférico PWM
+ * **************************************************************************************************
  */
+
 #include "PwmDriver.h"
 #include "BasicTimer.h"
 

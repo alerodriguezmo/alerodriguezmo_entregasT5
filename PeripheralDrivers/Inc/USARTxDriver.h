@@ -1,8 +1,9 @@
-/*
- * USARTxDriver.h
- *
- *  Created on: Apr 6, 2022
- *      Author: mauribeh
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : USARTx.h
+ * @brief    : Archivo de cabecera del driver del periférico USARTx
+ * **************************************************************************************************
  */
 
 #include <stdio.h>

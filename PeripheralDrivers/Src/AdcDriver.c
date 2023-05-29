@@ -1,9 +1,11 @@
-/*
- * AdcDriver.c
- *
- *  Created on: Month XX, 2022
- *      Author: namontoy
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : AdcDriver.c
+ * @brief    : Archivo de fuente del driver del periférico ADC
+ * **************************************************************************************************
  */
+
 #include "AdcDriver.h"
 #include "GPIOxDriver.h"
 

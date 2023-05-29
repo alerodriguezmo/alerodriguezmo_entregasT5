@@ -1,8 +1,9 @@
-/*
- * USARTxDriver.c
- *
- *  Created on: Apr 6, 2022
- *      Author: namontoy
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : USARTx.c
+ * @brief    : Archivo de fuente del driver del periférico USARTx
+ * **************************************************************************************************
  */
 
 #include <stm32f4xx.h>

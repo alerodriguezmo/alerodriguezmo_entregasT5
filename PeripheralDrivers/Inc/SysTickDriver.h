@@ -1,8 +1,9 @@
-/*
- * SysTickDriver.h
- *
- *  Created on: May 1, 2023
- *      Author: mauribeh
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : SysTick.h
+ * @brief    : Archivo de cabecera del driver del SysTick
+ * **************************************************************************************************
  */
 
 #ifndef SYSTICKDRIVER_H_
