@@ -1,107 +1,143 @@
 /*
- *************************************************************************
- * @file		: PLLDriver.c
- * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
- * @brief		: Archivo de fuente del driver del periférico PLL
+ * PLLDriver.c
  *
- *************************************************************************
+ *  Created on: May 20, 2023
+ *      Author: majo
  */
 
-#include <stm32f4xx.h>
-#include <stdint.h>
-#include <PLLDriver.h>
+#include "PLLDriver.h"
 
-void PLL_Config(PLL_Config_t *PLLConfig){
-	//1. Se configuran los parametros del PLL
-	//1.1 Se configura la señal que se usará de referencia
-	if(PLLConfig->PLL_src == 1){//HSI es 1
-		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLSRC);//Se selecciona el HSI como señal de referencia (bit 22=0)
-	}else{
-		RCC->PLLCFGR |= (1<<RCC_PLLCFGR_PLLSRC_Pos);//Se selecciona el HSE como señal de referencia  (bit 22=1)
+void configPLL(uint8_t frequency){
+	// HSI clock selected as PLL and PLLI2S clock entry
+	RCC -> PLLCFGR &= ~(RCC_PLLCFGR_PLLSRC);
+
+	switch (frequency){
+	case 0:
+		/* Division factor for the main PLL (PLL) input clock
+		 * VCO input frequency = PLL input clock frequency / PLLM with 2 ≤ PLLM ≤ 63
+		 * VCO input frequency ranges from 1 to 2 MHz.*
+		 */
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLM); // Limpiamos
+		/*Ponemos PLLM en 8 */
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLM_3);
+
+		/* Main PLL (PLL) multiplication factor for VCO
+		 * VCO output frequency = VCO input frequency × PLLN with 50 ≤ PLLN ≤ 432
+		 * VCO output frequency is between 100 and 432 MHz
+		 * */
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLN); // Limpiamos
+		/* Ponemos PLLN en 80 */
+//		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_0);
+//		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_1);
+//		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_2);
+//		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_3);
+//		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_6);
+
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_4);
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_6);
+
+		/* Main PLL (PLL) division factor for main system clock
+		 * PLL output clock frequency = VCO frequency / PLLP with PLLP = 2, 4, 6, or 8
+		 * NOT to exceed 100 MHz on this domain
+		 * */
+		/* Ponemos el PLLP en 2 */
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLP);
+
+		/* Latencia del FLASH_ACR para que se demore y pueda hacer el registro */
+		// 2 Wait states segun la tabla
+		FLASH -> ACR &= ~(FLASH_ACR_LATENCY); // Limpiamos
+		FLASH -> ACR |= (FLASH_ACR_LATENCY_2WS);
+		break;
+	case 1:
+		/* Division factor for the main PLL (PLL) input clock
+		 * VCO input frequency = PLL input clock frequency / PLLM with 2 ≤ PLLM ≤ 63
+		 * VCO input frequency ranges from 1 to 2 MHz.*
+		 */
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLM); // Limpiamos
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLM_3); // Ponemos un 8 en el PLLM
+
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLN); // Limpiamos
+		/* Ponemos PLLN en 100 */
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_2);
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_5);
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_6);
+
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLP); // Limpiamos
+
+		/* Latencia del FLASH_ACR para que se demore y pueda hacer el registro */
+		// 3 Wait states
+		FLASH -> ACR &= ~(FLASH_ACR_LATENCY); // Limpiamos
+		FLASH -> ACR |= (FLASH_ACR_LATENCY_1WS);
+		FLASH -> ACR |= (FLASH_ACR_LATENCY_2WS);
+
+		/* Configuramos el MC01 (PIN A8 como funcion alternativa 00) */
+
+		// Seleccionamos la senal PLL
+		RCC -> CFGR |= RCC_CFGR_MCO1_0;
+		RCC -> CFGR |= RCC_CFGR_MCO1_1;
+
+		// Utilizamos un prescaler para poder ver la senal en el osciloscopio
+		RCC -> CFGR |= RCC_CFGR_MCO1PRE_0;
+		RCC -> CFGR |= RCC_CFGR_MCO1PRE_1;
+		RCC -> CFGR |= RCC_CFGR_MCO1PRE_2;
+		break;
+	default:
+		/* Division factor for the main PLL (PLL) input clock
+		 * VCO input frequency = PLL input clock frequency / PLLM with 2 ≤ PLLM ≤ 63
+		 * VCO input frequency ranges from 1 to 2 MHz.*
+		 */
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLM); // Limpiamos
+		/*Ponemos PLLM en 8 */
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLM_3);
+
+		/* Main PLL (PLL) multiplication factor for VCO
+		 * VCO output frequency = VCO input frequency × PLLN with 50 ≤ PLLN ≤ 432
+		 * VCO output frequency is between 100 and 432 MHz
+		 * */
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLN); // Limpiamos
+		/* Ponemos PLLN en 80 */
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_5);
+		RCC->PLLCFGR |= (RCC_PLLCFGR_PLLN_7);
+
+		/* Main PLL (PLL) division factor for main system clock
+		 * PLL output clock frequency = VCO frequency / PLLP with PLLP = 2, 4, 6, or 8
+		 * NOT to exceed 100 MHz on this domain
+		 * */
+		/* Ponemos el PLLP en 2 */
+		RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLP);
+
+		/* Latencia del FLASH_ACR para que se demore y pueda hacer el registro */
+		// 2 Wait states segun la tabla
+		FLASH -> ACR &= ~(FLASH_ACR_LATENCY); // Limpiamos
+		FLASH -> ACR |= (FLASH_ACR_LATENCY_2WS);
+		break;
 	}
-	//Se activa el power interface clock
-	RCC->APB1ENR |= RCC_APB1ENR_PWREN;
-
-	//1.6 Se configura el PWR_CR para que el micro para que se regulen bien los voltajes en las frecuencias
-	PWR->CR |=  (0b10<<PWR_CR_VOS_Pos);
-	FLASH->ACR |= FLASH_ACR_PRFTEN;
-	FLASH->ACR |= FLASH_ACR_ICEN;
-	FLASH->ACR |= FLASH_ACR_DCEN;
-
-	//1.7 Se le configuran los wait states al micro para que la memoria flash le pueda seguir el ritmo.
-	FLASH->ACR &= ~FLASH_ACR_LATENCY;
-	FLASH->ACR |= FLASH_ACR_LATENCY_2WS;
-
-	//1.2 Se configura el PLLM, factor de división para la frecuencia de la señal de referencia para configurar la VCOInput freq
-	//    debe estar en [1,2]MHz, se recomienda 2
-	RCC->PLLCFGR &= ~RCC_PLLCFGR_PLLM; //Se limpia todo el pllm
-	RCC->PLLCFGR |= (PLLConfig->PLL_pllm<<RCC_PLLCFGR_PLLM_Pos);   //Se escribe el valor deseado
-
-	//1.3 Se configura el PLLN, factor de multiplicación para la frecuencia de salida del VCO. La salida debe pertenecer a [100,432]MHz.
-	RCC->PLLCFGR &= ~RCC_PLLCFGR_PLLN; 		//Se limpia el plln
-	RCC->PLLCFGR |= (PLLConfig->PLL_plln<<RCC_PLLCFGR_PLLN_Pos);  //Se escribe el valor en el plln
-
-	//1.4 Se configura el PLLP Factor de división para la frecuencia de salida del VCO, da el valor de salida del PLL, <100MHz
-	RCC->PLLCFGR &= ~RCC_PLLCFGR_PLLP;//Se limpia
-	switch(PLLConfig->PLL_pllp){//Se escribe dependiendo el utilizado
-		case 2:{
-			RCC->PLLCFGR |= (0b00<<RCC_PLLCFGR_PLLP_Pos);
-			break;
-		}
-		case 4:{
-			RCC->PLLCFGR |= (0b01<<RCC_PLLCFGR_PLLP_Pos);
-			break;
-		}
-		case 6:{
-			RCC->PLLCFGR |= (0b10<<RCC_PLLCFGR_PLLP_Pos);
-			break;
-		}
-		case 8:{
-			RCC->PLLCFGR |= (0b11<<RCC_PLLCFGR_PLLP_Pos);
-			break;
-		}
-		default:{
-			break;}
-	}
-
-	RCC->CFGR &= ~RCC_CFGR_HPRE;
-	RCC->CFGR |= RCC_CFGR_HPRE_DIV1; // Con esto para el bus AHB dividimos por 1, queda en 80 MHz, o lo mismo del PLLFreqMHz
-
-	//1.5 Se configura el prescaler del APB1 para que no exceda los 50MHz
-	RCC->CFGR &=~RCC_CFGR_PPRE1;
-	RCC->CFGR |= RCC_CFGR_PPRE1_DIV2;//se divide por dos, puesto que es máx 100MHz lo que puede dar el reloj
-
-	//Para APB2
-	RCC->CFGR |= RCC_CFGR_PPRE2_DIV1;
-	//Para que se pueda usar el MCO1
-	RCC->CFGR |= RCC_CFGR_MCO1; // Con este para el MCO1 uso la PLL
-	RCC->CFGR &= ~RCC_CFGR_MCO1PRE;
-	RCC->CFGR |= RCC_CFGR_MCO1PRE; // Con esta macro, divido los 80MHz por 5, para tener 16MHz en el pin MCO1
 
 
-
-
-	//2. Se habilita el PLL
+	// Encendemos el PLL
 	RCC->CR |= RCC_CR_PLLON;
-	//3. Se espera hasta que el PLL esté listo
-	while( !(RCC->CR & RCC_CR_PLLRDY)){
+
+	// Esperamos que el PLL se cierre (estabilizacion)
+	while (!(RCC->CR & RCC_CR_PLLRDY)){
 		__NOP();
 	}
-	//4. Se selecciona al PLL como reloj principal
 
-	RCC->CFGR &= ~RCC_CFGR_SW;
-	RCC->CFGR |= RCC_CFGR_SW_1;
+	// Cambiamos el CPU Clock source cambiando los SW bits (System Clock Switch)
+	/* System Clock Switch para PLL */
+	RCC -> CFGR &= ~(RCC_CFGR_SW); // Limpiamos
+	RCC -> CFGR |= (RCC_CFGR_SW_1);
+
 }
 
-int PLL_GetConfig(PLL_Config_t *PLLConfig){
+/* Funcion para leer el registro con la informacion de la Frecuencia del micro */
+int getConfigPLL(void){
+	uint32_t frequencyValue =0;
+	uint32_t RCCPLLn = ((RCC->PLLCFGR & RCC_PLLCFGR_PLLN) >> RCC_PLLCFGR_PLLN_Pos);
 
-	int freq = 0;
-	if(PLLConfig->PLL_src == 1){
-		freq = PLLConfig->PLL_plln*16/(PLLConfig->PLL_pllm*PLLConfig->PLL_pllp);
-		return freq;
-	}else{
-		return freq;
+	if(RCC->CFGR | (RCC_CR_PLLON)){
+		frequencyValue= (RCCPLLn*1000000);
+	}else if(RCC->CFGR &= ~(RCC_CR_PLLON)){
+		frequencyValue = (RCC->CFGR & RCC_CFGR_SW_HSI);
 	}
+	return frequencyValue;
 }
-
-

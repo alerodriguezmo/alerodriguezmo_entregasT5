@@ -24,10 +24,16 @@ GPIO_Handler_t handlerLedOk	= {0};
 GPIO_Handler_t handlerPinTX = {0};
 GPIO_Handler_t handlerPinRX	= {0};
 
-BasicTimer_Handler_t handlerStateOKTimer = {0};
+BasicTimer_Handler_t handlerStateOKTimer 	= {0};
+BasicTimer_Handler_t handerSampling1KHz		= {0};
 
 
 USART_Handler_t handlerCommTerminal	= {0};
+
+uint8_t flagSampling1KHz = 0;
+uint8_t flagTabulate = 0;
+uint8_t flagShowTable = 0;
+uint16_t counter2KSamples = 0;
 uint8_t rxData = 0;
 char bufferData[64] = "Accel MPU-6050 testing...";
 
@@ -42,21 +48,33 @@ GPIO_Handler_t handlerI2CSCL = {0};
 I2C_Handler_t handlerAccelerometer = {0};
 uint8_t i2cBuffer = 0;
 
-#define ACCEL_ADRESS	0b1101000; // LSB en 1 para el 1 lógico activado en el accelerómetro, 0 en caso contrario
-#define ACCEL_XOUT_H	59
-#define ACCEL_XOUT_L	60
-#define ACCEL_YOUT_H	61
-#define ACCEL_YOUT_L	62
-#define ACCEL_ZOUT_H	63
-#define ACCEL_ZOUT_L	64
+#define ACCEL_ADDRESS          	 0b1101001
+#define ACCEL_XOUT_L             59
+#define ACCEL_XOUT_H             60
+#define ACCEL_YOUT_L             61
+#define ACCEL_YOUT_H             62
+#define ACCEL_ZOUT_L             63
+#define ACCEL_ZOUT_H             64
 
-#define PWR_MGMT_1		107
-#define WHO_AM_I		117
+#define PWR_MGMT_1               107
+#define WHO_AM_I                 117
 
+////Variables globales para no tener que declararlas siempre en cuanto a coordenadas
+int16_t coordinates[3];//Array donde se van a actualizar los datos cada mS de las coordenadas
+
+int16_t coordinatex[2000];//Array donde se van a guardar los datos para x
+int16_t coordinatey[2000];//Array donde se van a guardar los datos para y
+int16_t coordinatez[2000];//Array donde se van a guardar los datos para z
+
+uint8_t coordinatesbool = 0; //V. Auxiliar que es una flag para calcular las coordenadas
+
+BasicTimer_Handler_t handlerMuestreo = {0};
 
 /*	Definicion de prototipos de funciones	*/
 void initSystem(void);
-
+void sampleAt1KHz(void);
+void showSampleInLCD(void);
+void tabulateSamples(void);
 /*
  * Función principal del programa
  * */
@@ -85,6 +103,10 @@ int main(void){
 			}
 			else if(rxData == 'p'){
 				sprintf(bufferData, "PWR_MGMT_1 state (r)\n");
+				writeMsg(&handlerCommTerminal, bufferData);
+
+				i2cBuffer = i2c_readSingleRegister(&handlerAccelerometer, PWR_MGMT_1);
+				sprintf(bufferData, "Estado = 0x%x \n", (unsigned int) i2cBuffer);
 				writeMsg(&handlerCommTerminal, bufferData);
 				rxData = '\0';
 			}
@@ -140,7 +162,7 @@ void initSystem(void){
 	handlerLedOk.pGPIOx								= GPIOA;
 	handlerLedOk.GPIO_PinConfig.GPIO_PinNumber		= PIN_5;
 	handlerLedOk.GPIO_PinConfig.GPIO_PinMode		= GPIO_MODE_OUT;
-	handlerLedOk.GPIO_PinConfig.GPIO_PinOPType		= GPIO_OTYPE_PUSHPULL;
+	handlerLedOk.GPIO_PinConfig.GPIO_PinOType		= GPIO_OTYPE_PUSHPULL;
 	handlerLedOk.GPIO_PinConfig.GPIO_PinSpeed		= GPIO_OSPEED_FAST;
 	handlerLedOk.GPIO_PinConfig.GPIO_PinPuPdControl	= GPIO_PUPDR_NOTHING;
 
@@ -151,7 +173,7 @@ void initSystem(void){
 	handlerPinTX.pGPIOx								= GPIOA;
 	handlerPinTX.GPIO_PinConfig.GPIO_PinNumber		= PIN_2;
 	handlerPinTX.GPIO_PinConfig.GPIO_PinMode		= GPIO_MODE_ALTFN;
-	handlerPinTX.GPIO_PinConfig.GPIO_PinOPType		= GPIO_OTYPE_PUSHPULL;
+	handlerPinTX.GPIO_PinConfig.GPIO_PinOType		= GPIO_OTYPE_PUSHPULL;
 	handlerPinTX.GPIO_PinConfig.GPIO_PinSpeed		= GPIO_OSPEED_FAST;
 	handlerPinTX.GPIO_PinConfig.GPIO_PinPuPdControl	= GPIO_PUPDR_NOTHING;
 	handlerPinTX.GPIO_PinConfig.GPIO_PinAltFunMode 	= AF7;
@@ -159,7 +181,7 @@ void initSystem(void){
 	handlerPinRX.pGPIOx								= GPIOA;
 	handlerPinRX.GPIO_PinConfig.GPIO_PinNumber		= PIN_3;
 	handlerPinRX.GPIO_PinConfig.GPIO_PinMode		= GPIO_MODE_ALTFN;
-	handlerPinRX.GPIO_PinConfig.GPIO_PinOPType		= GPIO_OTYPE_PUSHPULL;
+	handlerPinRX.GPIO_PinConfig.GPIO_PinOType		= GPIO_OTYPE_PUSHPULL;
 	handlerPinRX.GPIO_PinConfig.GPIO_PinSpeed		= GPIO_OSPEED_FAST;
 	handlerPinRX.GPIO_PinConfig.GPIO_PinPuPdControl	= GPIO_PUPDR_NOTHING;
 	handlerPinRX.GPIO_PinConfig.GPIO_PinAltFunMode 	= AF7;
@@ -169,7 +191,7 @@ void initSystem(void){
 	GPIO_Config(&handlerPinRX);
 
 	// Configuramos la comunicación serial
-	handlerCommTerminal.ptrUSARTx						= USART1;
+	handlerCommTerminal.ptrUSARTx						= USART2;
 	handlerCommTerminal.USART_Config.USART_datasize		= USART_DATASIZE_8BIT;
 	handlerCommTerminal.USART_Config.USART_parity		= USART_PARITY_NONE;
 	handlerCommTerminal.USART_Config.USART_stopbits		= USART_STOPBIT_1;
@@ -181,7 +203,7 @@ void initSystem(void){
 	// Cargamos la configuración
 	USART_Config(&handlerCommTerminal);
 
-	// Configuramos el Timer
+	// Configuramos el Timer del led OK
 	handlerStateOKTimer.ptrTIMx								= TIM2;
 	handlerStateOKTimer.TIMx_Config.TIMx_mode				= BTIMER_MODE_UP;
 	handlerStateOKTimer.TIMx_Config.TIMx_speed				= BTIMER_SPEED_1ms;
@@ -191,11 +213,21 @@ void initSystem(void){
 	// Cargando la configuración del TIM2
 	BasicTimer_Config(&handlerStateOKTimer);
 
+	// Configuramos el Timer para el muestreo
+	handlerStateOKTimer.ptrTIMx								= TIM5;
+	handlerStateOKTimer.TIMx_Config.TIMx_mode				= BTIMER_MODE_UP;
+	handlerStateOKTimer.TIMx_Config.TIMx_speed				= BTIMER_SPEED_1ms;
+	handlerStateOKTimer.TIMx_Config.TIMx_period				= 1; // Lanza una interrupción cada 1 ms para un muestreo a 1KHz
+	handlerStateOKTimer.TIMx_Config.TIMx_interruptEnable	= 1;
+
+	// Cargando la configuración del TIM2
+	BasicTimer_Config(&handlerStateOKTimer);
+
 	// Configurando los pines sobre los que funciona el I2C1
 	handlerI2CSCL.pGPIOx								= GPIOB;
 	handlerI2CSCL.GPIO_PinConfig.GPIO_PinNumber			= PIN_8;
 	handlerI2CSCL.GPIO_PinConfig.GPIO_PinMode			= GPIO_MODE_ALTFN;
-	handlerI2CSCL.GPIO_PinConfig.GPIO_PinOPType			= GPIO_OTYPE_OPENDRAIN;
+	handlerI2CSCL.GPIO_PinConfig.GPIO_PinOType			= GPIO_OTYPE_OPENDRAIN;
 	handlerI2CSCL.GPIO_PinConfig.GPIO_PinSpeed			= GPIO_OSPEED_FAST;
 	handlerI2CSCL.GPIO_PinConfig.GPIO_PinPuPdControl	= GPIO_PUPDR_NOTHING;
 	handlerI2CSCL.GPIO_PinConfig.GPIO_PinAltFunMode 	= AF4;
@@ -203,7 +235,7 @@ void initSystem(void){
 	handlerI2CSDA.pGPIOx								= GPIOB;
 	handlerI2CSDA.GPIO_PinConfig.GPIO_PinNumber			= PIN_9;
 	handlerI2CSDA.GPIO_PinConfig.GPIO_PinMode			= GPIO_MODE_ALTFN;
-	handlerI2CSDA.GPIO_PinConfig.GPIO_PinOPType			= GPIO_OTYPE_OPENDRAIN;
+	handlerI2CSDA.GPIO_PinConfig.GPIO_PinOType			= GPIO_OTYPE_OPENDRAIN;
 	handlerI2CSDA.GPIO_PinConfig.GPIO_PinSpeed			= GPIO_OSPEED_FAST;
 	handlerI2CSDA.GPIO_PinConfig.GPIO_PinPuPdControl	= GPIO_PUPDR_NOTHING;
 	handlerI2CSDA.GPIO_PinConfig.GPIO_PinAltFunMode 	= AF4;
@@ -215,12 +247,55 @@ void initSystem(void){
 	// Configuramos el protocolo I2C y cargamos dicha configuración
 	handlerAccelerometer.ptrI2Cx			= I2C1;
 	handlerAccelerometer.modeI2C			= I2C_MODE_FM;
-	handlerAccelerometer.slaveAddress		= ACCEL_ADRESS;
+	handlerAccelerometer.slaveAddress		= ACCEL_ADDRESS;
 
 	i2c_config(&handlerAccelerometer);
 }
 
-/*allback relacionado con la recepción del USART2
+// Función que toma muestras a 1KHz
+void sampleAt1KHz(void){
+	if(flagSampling1KHz){
+
+		// Se muestrea cada uno de los ejes
+	    uint8_t AccelX_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_L);
+	    uint8_t AccelX_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_H);
+	    coordinates[0] = AccelX_high << 8 | AccelX_low;
+
+	    uint8_t AccelY_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_YOUT_L);
+	    uint8_t AccelY_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_YOUT_H);
+	    int16_t AccelY = AccelY_high << 8 | AccelY_low;
+	    coordinates[1] = AccelY;
+
+	    uint8_t AccelZ_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_L);
+	    uint8_t AccelZ_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_H);
+	    int16_t AccelZ = AccelZ_high << 8 | AccelZ_low;
+	    coordinates[2] = AccelZ;
+
+	    // Se aumenta el contador que permite almacenar 2000 datos
+	    if(counter2KSamples != 2000){
+	    	counter2KSamples++;
+	    	}
+	    else{
+	    	__NOP();
+	    }
+	    }
+}
+
+// Función que captura durante 2s los datos de los 3 ejes del acelerómetro y los imprime
+// en la interfaz serial los datos, en formato de tres columnas (x ; y ; z) con los datos separados por el símbolo “;”
+void tabulateSamples(void){
+	if(flagTabulate == 8){
+		coordinatex[counter2KSamples] = coordinates[0];
+		coordinatey[counter2KSamples] = coordinates[1];
+		coordinatez[counter2KSamples] = coordinates[2];
+
+		flagTabulate = 0;
+	}else{
+		__NOP();
+	}
+}
+
+/*Callback relacionado con la recepción del USART2
  * Debo leer el puerto para bajar la bandera de la interrupción
  */
 void usart2Rx_Callback(void){
@@ -232,5 +307,19 @@ void usart2Rx_Callback(void){
 // Callback del timer 2 correspondiente al LED Blinky
 void BasicTimer2_Callback(void){
 	// Callback del blinky
-	GPIOxTooglePin(&handlerLedOk);
+	GPIOxTogglePin(&handlerLedOk);
+
+	// Callback para la tabulación cada 2s
+	flagTabulate++;
+}
+
+// Callback del timer 5 correspondiente al muestreo a 1KHz
+void BasicTimer5_Callback(void){
+	// Callback del sampling
+	if(flagSampling1KHz){
+		flagSampling1KHz = 0;
+	}else{
+		flagSampling1KHz = 1;
+	}
+
 }

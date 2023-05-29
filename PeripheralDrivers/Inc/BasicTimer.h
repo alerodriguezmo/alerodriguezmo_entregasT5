@@ -1,29 +1,30 @@
 /*
- *************************************************************************
- * @file		: BasicTimer.h
- * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
- * @brief		: Archivo de cabecera del driver del periférico TIMx
+ * BasicTimer.h
  *
- *************************************************************************
+ *  Created on: Apr 18, 2022
+ *      Author: namontoy
  */
-
 
 #ifndef INC_BASICTIMER_H_
 #define INC_BASICTIMER_H_
 
 #include "stm32f4xx.h"
 
-#define BTIMER_MODE_UP				0
-#define BTIMER_MODE_DOWN			1
+#define BTIMER_MODE_UP		0
+#define BTIMER_MODE_DOWN	1
 
-#define BTIMER_SPEED_10us			160
-#define BTIMER_SPEED_100us			1600
-#define BTIMER_SPEED_1ms			16000
+#define BTIMER_SPEED_10us	160
+#define BTIMER_SPEED_100us	1600
+#define BTIMER_SPEED_1ms	16000
 
-#define BTIMER_INTERRUPT_ENABLE 	1
-#define BTIMER_INTERRUPT_DISABLE 	0
+#define BTIMER_SPEED_100Mhz_10us	1000
+#define BTIMER_SPEED_100Mhz_100us	10000
 
+#define BTIMER_SPEED_80Mhz_10us	    800
+#define BTIMER_SPEED_80Mhz_100us	8000
 
+#define BTIMER_INTERRUP_ENABLE  1
+#define BTIMER_INTERRUP_DISABLE 0
 
 /* Estructura que contiene la configuración mínima necesaria para el manejo del Timer.*/
 typedef struct

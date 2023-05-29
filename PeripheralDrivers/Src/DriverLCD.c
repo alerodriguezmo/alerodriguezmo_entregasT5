@@ -10,6 +10,7 @@
 
 #include <DriverLCD.h>
 #include <stdint.h>
+#include "SysTickDriver.h"
 
 /*
  * Se debe configurar los pines para el I2Cx (SDA y SCL),
@@ -20,6 +21,7 @@
  */
 
 void sendCMD_toLCD(I2C_Handler_t *ptrHandlerI2C, char cmd){
+	//Falta formato con el que se está enviando, revisar
 	char _U;
 	char _L;
 	uint8_t _T[4];
@@ -216,28 +218,20 @@ void moveCursor_inLCD(I2C_Handler_t *ptrHandlerI2C, uint8_t x, uint8_t y){
 }
 
 void delay_50 (void){
-	for (int i=0;i<62500;i++){
-		__NOP();
-	}
+	delay_ms(50);
 }
 
 void delay_5 (void){
-	for (int i=0; i<6250; i++){
-		__NOP();
-	}
+	delay_ms(5);
 }
 
 void delay_1 (void){
-	for (int i=0;i<1250;i++){
-		__NOP();
-	}
+	delay_ms(1);
+}
+void delay_10 (void){
+	delay_ms(10);
 }
 
-void delay_10 (void){
-	for (int i=0;i<12500;i++){
-		__NOP();
-	}
-}
 
 void clearScreenLCD(I2C_Handler_t *ptrHandlerI2C){
 	char DataClean[64] = "                    ";

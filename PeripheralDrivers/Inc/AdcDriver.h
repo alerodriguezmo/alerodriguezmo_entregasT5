@@ -1,10 +1,8 @@
 /*
- *************************************************************************
- * @file		: AdcDriver.h
- * @author		: Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
- * @brief		: Archivo de cabecera del driver de la conversión ADC
+ * AdcDriver.h
  *
- *************************************************************************
+ *  Created on: Month XX, 2022
+ *      Author: namontoy
  */
 
 #ifndef INC_ADCDRIVER_H_
