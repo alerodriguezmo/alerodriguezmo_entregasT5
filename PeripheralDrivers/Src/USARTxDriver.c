@@ -136,28 +136,27 @@ void USART_Config(USART_Handler_t *ptrUsartHandler){
 
 	} else if (ptrUsartHandler->USART_Config.USART_frequency == 100){
 		if(ptrUsartHandler->USART_Config.USART_baudrate == USART_BAUDRATE_9600){
-				// El valor a cargar es 104.1875 -> Mantiza = 104,fraction = 0.1875
-				// Mantiza = 104 = 0x68, fraction = 16 * 0.1875 = 3
-				// Valor a cargar 0x0683
+				// El valor a cargar es 651.04167 -> Mantiza = 651,fraction = 0.04167
+				// Mantiza = 651 = 0x28B, fraction = 16 * 0.04167 = 1 = 0x1
+				// Valor a cargar 0x28B1
 				// Configurando el Baudrate generator para una velocidad de 9600bps
-				ptrUsartHandler->ptrUSARTx->BRR = 0x0683;
+				ptrUsartHandler->ptrUSARTx->BRR = 0x28B1;
 			}
 
 			else if (ptrUsartHandler->USART_Config.USART_baudrate == USART_BAUDRATE_19200) {
-				// El valor a cargar es 52.0625 -> Mantiza = 52,fraction = 0.0625
-				// Mantiza = 52 = 0x34, fraction = 16 * 0.0625 = 1
-				// Escriba acá su código y los comentarios que faltan
-				// Valor a cargar 0x0341
+				// El valor a cargar es 325.52083 -> Mantiza = 325,fraction = 0.52083
+				// Mantiza = 325 = 0x145, fraction = 16 * 0.52083 = 8 = 0x8
+				// Valor a cargar 0x1458
 				// Configurando el Baudrate generator para una velocidad de 19200bps
-				ptrUsartHandler->ptrUSARTx->BRR = 0x0341;
+				ptrUsartHandler->ptrUSARTx->BRR = 0x1458;
 			}
 
 			else if(ptrUsartHandler->USART_Config.USART_baudrate == USART_BAUDRATE_115200){
-				// El valor a cargar es 8.6875 -> Mantiza = 8,fraction = 0.6875
-				// Mantiza = 8 = 0x8, fraction = 16 * 0.6875 = 11 0xB
-				// Valor a cargar 0x008B
+				// El valor a cargar es 54.25347 -> Mantiza = 54,fraction = 0.25347
+				// Mantiza = 54 = 0x36, fraction = 16 * 0.25347 = 4 = 0x4
+				// Valor a cargar 0x0364
 				// Configurando el Baudrate generator para una velocidad de 115200bps
-				ptrUsartHandler->ptrUSARTx->BRR = 0x08B;
+				ptrUsartHandler->ptrUSARTx->BRR = 0x0364;
 			}
 
 	}else {

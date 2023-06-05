@@ -1,11 +1,9 @@
-/**
- * **************************************************************************************************
- * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
- * @author   : AdcDriver.c
- * @brief    : Archivo de fuente del driver del periférico ADC
- * **************************************************************************************************
+/*
+ * AdcDriver.c
+ *
+ *  Created on: Month XX, 2022
+ *      Author: namontoy
  */
-
 #include "AdcDriver.h"
 #include "GPIOxDriver.h"
 
@@ -29,42 +27,41 @@ void adc_Config(ADC_Config_t *adcConfig){
 	switch(adcConfig->resolution){
 	case ADC_RESOLUTION_12_BIT:
 	{
-		//Se deja en 0
+		ADC1->CR1 &= ~ADC_CR1_RES;//00->12 bits
 		break;
 	}
 
 	case ADC_RESOLUTION_10_BIT:
 	{
-		ADC1->CR1|=ADC_CR1_RES_0;//01->10bits
+		ADC1->CR1 |= ADC_CR1_RES_0;//01->10bits
 		break;
 	}
 
 	case ADC_RESOLUTION_8_BIT:
 	{
-		ADC1->CR1|=ADC_CR1_RES_1;//10->8bits
-		// Escriba su código acá
-		// Escriba su código acá
+		ADC1->CR1 |= ADC_CR1_RES_1;//10->8bits
 		break;
 	}
 
 	case ADC_RESOLUTION_6_BIT:
 	{
-		ADC1->CR1|=ADC_CR1_RES;//11->6bits
+		ADC1->CR1 |= ADC_CR1_RES;//11->6bits
 		break;
 	}
 
 	default:
 	{
+		ADC1->CR1 &= ~ADC_CR1_RES;//00->12 bits
 		break;
 	}
 	}
 
 	/* 4. Configuramos el modo Scan como desactivado */
-	//Como se inicializó en 0 todo el CR1, se deja quieto
+	ADC1->CR1 &= ~ADC_CR1_SCAN;
 
 	/* 5. Configuramos la alineación de los datos (derecha o izquierda) */
 	if(adcConfig->dataAlignment == ADC_ALIGNMENT_RIGHT){
-		//Se deja quieto porque se inicializó en 0
+		ADC1->CR2 &= ~ADC_CR2_ALIGN;
 	}
 	else{
 		// Alineación a la izquierda (para algunos cálculos matemáticos)
@@ -72,7 +69,7 @@ void adc_Config(ADC_Config_t *adcConfig){
 	}
 
 	/* 6. Desactivamos el "continuos mode" */
-	// Está desactivado por defecto
+	ADC1->CR2 &= ~ADC_CR2_CONT;
 
 
 	/* 7. Acá se debería configurar el sampling...*/
@@ -100,10 +97,10 @@ void adc_Config(ADC_Config_t *adcConfig){
 	ADC1->CR1 |= ADC_CR1_EOCIE;
 
 	/* 11a. Matriculamos la interrupción en el NVIC*/
-	NVIC_EnableIRQ(ADC_IRQn);
+	__NVIC_EnableIRQ(ADC_IRQn);
 	
 	/* 11b. Configuramos la prioridad para la interrupción ADC */
-	// Escriba su código acá
+	__NVIC_SetPriority(ADC_IRQn, 4);
 
 	/* 12. Activamos el modulo ADC */
 	ADC1->CR2 |= ADC_CR2_ADON;
@@ -141,7 +138,7 @@ void startSingleADC(void){
 void startContinousADC(void){
 
 	/* Activamos el modo continuo de ADC */
-	ADC1->CR2 &= ~ADC_CR2_CONT;
+	ADC1->CR2 |= ADC_CR2_CONT;
 
 	/* Iniciamos un ciclo de conversión ADC */
 	ADC1->CR2 |= ADC_CR2_SWSTART;
@@ -167,8 +164,7 @@ void ADC_IRQHandler(void){
 	if(ADC1->SR & ADC_SR_EOC){
 		// Leemos el resultado de la conversión ADC y lo cargamos en una variale auxiliar
 		// la cual es utilizada en la función getADC()
-		// Escriba su código acá
-
+		adcRawData = ADC1->DR;
 		// Hacemos el llamado a la función que se ejecutará en el main
 		adcComplete_Callback();
 	}
@@ -201,41 +197,48 @@ void configAnalogPin(uint8_t adcChannel) {
 		;
 
 	case ADC_CHANNEL_1: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOA;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_1;
 
 		break;
 	}
 
 	case ADC_CHANNEL_2: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOA;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_1;
 
 		break;
 	}
 
 	case ADC_CHANNEL_3: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOA;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_3;
 
 		break;
 	}
 
 	case ADC_CHANNEL_4: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOA;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_4;
 
 		break;
 	}
 
 	case ADC_CHANNEL_5: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOA;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_5;
 		
 		break;
 	}
 	case ADC_CHANNEL_6: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOA;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_6;
 		
 		break;
 	}
 	case ADC_CHANNEL_7: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOA;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_7;
 		
 		break;
 	}
@@ -246,37 +249,44 @@ void configAnalogPin(uint8_t adcChannel) {
 		break;
 	}
 	case ADC_CHANNEL_9: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOB;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_1;
 		
 		break;
 	}
 	case ADC_CHANNEL_10: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOC;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_0;
 		
 		break;
 	}
 	case ADC_CHANNEL_11: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOC;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_1;
 		
 		break;
 	}
 	case ADC_CHANNEL_12: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOC;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_2;
 		
 		break;
 	}
 	case ADC_CHANNEL_13: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOC;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_3;
 		
 		break;
 	}
 	case ADC_CHANNEL_14: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOC;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_4;
 		
 		break;
 	}
 	case ADC_CHANNEL_15: {
-		// Buscar y configurar adecuadamente
+		handlerAdcPin.pGPIOx 						= GPIOC;
+		handlerAdcPin.GPIO_PinConfig.GPIO_PinNumber = PIN_5;
 		
 		break;
 	}

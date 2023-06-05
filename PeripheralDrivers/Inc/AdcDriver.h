@@ -1,9 +1,8 @@
-/**
- * **************************************************************************************************
- * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
- * @author   : AdcDriver.h
- * @brief    : Archivo de cabecera del driver del periférico ADC
- * **************************************************************************************************
+/*
+ * AdcDriver.h
+ *
+ *  Created on: Month XX, 2022
+ *      Author: namontoy
  */
 
 #ifndef INC_ADCDRIVER_H_
