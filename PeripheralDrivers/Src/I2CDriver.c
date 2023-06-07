@@ -255,12 +255,3 @@ void i2c_writeSingleRegister(I2C_Handler_t *ptrHandlerI2C, uint8_t regToRead, ui
 	i2c_stopTransaction(ptrHandlerI2C);
 
 }
-
-
-
-
-
-
-
-
-
