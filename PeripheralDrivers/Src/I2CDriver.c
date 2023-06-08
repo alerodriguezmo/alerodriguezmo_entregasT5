@@ -29,7 +29,7 @@ void i2c_config(I2C_Handler_t *ptrHandlerI2C){
 		RCC->APB1ENR |= RCC_APB1ENR_I2C3EN;
 	}
 
-	/* 2. Reiniciamso el periferico, de forma que se inicia en un estado conocido */
+	/* 2. Reiniciamos el periferico, de forma que se inicia en un estado conocido */
 	ptrHandlerI2C->ptrI2Cx->CR1 |= I2C_CR1_SWRST;
 	__NOP();
 	ptrHandlerI2C->ptrI2Cx->CR1 &= ~I2C_CR1_SWRST;
@@ -37,8 +37,16 @@ void i2c_config(I2C_Handler_t *ptrHandlerI2C){
 	/* 3. Indicamos cual es la velocidad del reloj principal. que es la senal utilizada
 	 * por el periferico para generar la senal de reloj para el bus I2C
 	 */
-	ptrHandlerI2C->ptrI2Cx->CR2 &= ~(0b111111 << I2C_CR2_FREQ_Pos); // Borramos la configuración previa
-	ptrHandlerI2C->ptrI2Cx->CR2 |= (ptrHandlerI2C->mainClock << I2C_CR2_FREQ_Pos);
+	if(ptrHandlerI2C->mainClock < 50){
+		ptrHandlerI2C->ptrI2Cx->CR2 &= ~(0b111111 << I2C_CR2_FREQ_Pos); // Borramos la configuración previa
+		ptrHandlerI2C->ptrI2Cx->CR2 |= (ptrHandlerI2C->mainClock << I2C_CR2_FREQ_Pos);
+	}
+	else{
+		ptrHandlerI2C->ptrI2Cx->CR2 &= ~(0b111111 << I2C_CR2_FREQ_Pos); // Borramos la configuración previa
+		ptrHandlerI2C->ptrI2Cx->CR2 |= (50 << I2C_CR2_FREQ_Pos);
+	}
+
+
 
 	/* 4. Configuramos el modo I2C en el que el sistema funciona
 	 * En esta configuracion se incluye tambien la velocidad del reloj

@@ -27,6 +27,18 @@
 
 /*	-	-	-	Definición de las macros a utilizar	-	-	-	*/
 
+#define ACCEL_ADDRESS          	 0x1D
+#define ACCEL_XOUT_L             50
+#define ACCEL_XOUT_H             51
+#define ACCEL_YOUT_L             52
+#define ACCEL_YOUT_H             53
+#define ACCEL_ZOUT_L             54
+#define ACCEL_ZOUT_H             55
+
+#define BW_RATE                  44
+#define POWER_CTL                45
+#define WHO_AM_I                 0
+
 /*	-	-	-	Definición de handlers	-	-	-	*/
 
 // Handlers de la comunicacion serial
@@ -43,6 +55,12 @@ GPIO_Handler_t handlerMCO		= {0};
 BasicTimer_Handler_t handlerBlinkyTimer = {0};
 BasicTimer_Handler_t handlerSampling	= {0};
 
+// Handlers del protocolo I2C
+GPIO_Handler_t handlerI2cSDA = {0};
+GPIO_Handler_t handlerI2cSCL = {0};
+
+I2C_Handler_t handlerAccelerometer = {0};
+
 /*	-	-	-	Definición de variables	-	-	-	*/
 
 // Variables de la comunicación serial por comandos
@@ -56,10 +74,35 @@ char cmd[64]					= {0};
 char userMsg[64]				= {0};
 char bufferData[64]				= {0};
 
+// Variables para la toma de datos con el acelerómetro
+uint8_t AccelX_low 		= 0;
+uint8_t AccelX_high 	= 0;
+int16_t AccelX 			= 0;
+uint8_t AccelY_low 		= 0;
+uint8_t AccelY_high 	= 0;
+int16_t AccelY 			= 0;
+uint8_t AccelZ_low		= 0;
+uint8_t AccelZ_high 	= 0;
+int16_t AccelZ 			= 0;
+
+uint8_t i2cBuffer 		= {0};
+uint32_t interrupt	 	= 0;
+uint8_t flag			= 0;
+
+float x,y,z;
+float dataAccel[3][200];
+
+// Variables para el SysTick
+uint8_t systemTicks = 0;
+uint8_t systemTicksStart = 0;
+uint8_t systemTicksEnd = 0;
+
+
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
 void initSystem(void);
 void tuneMCU(void);
 void parseCommands(char *ptrBufferReception);
+void saveDatum(void);
 /*	=	=	=	INICIO DEL MAIN	=	=	=	*/
 int main (void){
 	// Se afina el micro y se establecen los parámetros de operación correctos
@@ -71,12 +114,14 @@ int main (void){
 	// Se establece la frecuencia del micro en 100MHz
 	configPLL(FREQUENCY_100_MHz);
 
-	// Se establece la frecuencia de muestreo del accelerómetro 1600Hz
-
 	// Se imprime un mensaje de inicio por la terminal serial
 	writeMsg(&handlerCommTerminal, "EXAMEN FINAL - Taller V (2023-01) \n"
 			"Alejandro Rodriguez Montes \n"
 			"Escriba el comando 'help @' para ver los comandos disponibles \n");
+
+	// Encendemos el acelerómetro, muestreando a 1.6KHz
+	i2c_writeSingleRegister(&handlerAccelerometer, BW_RATE , 0xF);
+	i2c_writeSingleRegister(&handlerAccelerometer, POWER_CTL , 0b00001000);
 
 	while(1){
 
@@ -123,9 +168,9 @@ void tuneMCU(void){
 
 	// Inicialización del LSE
 
-	// Se establece el escalado del APB1 de forma que no exceda los 50MHz
+	// Se establece el escalado del APB1 para que reciba los 50MHz que tiene de frequencia máxima
 	RCC->CFGR &= ~(RCC_CFGR_PPRE1);
-	RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
+	RCC->CFGR |= RCC_CFGR_PPRE1_DIV2;
 	// Se enciende la señal de reloj del APB1
 	RCC->APB1ENR &= ~(RCC_APB1ENR_PWREN);
 	RCC->APB1ENR |= RCC_APB1ENR_PWREN;
@@ -153,6 +198,9 @@ void tuneMCU(void){
 
 	// Se activa el coprocesador matematico FPU
 	SCB->CPACR |= (0xF << 20);
+
+	// Se configura el systick a 100MHz
+	config_SysTick_ms(2);
 }
 
 /*	-	-	-	Función que inicializa los elementos del sistema	-	-	-	*/
@@ -184,9 +232,14 @@ void initSystem(void){
 	// Se carga la configuración
 	BasicTimer_Config(&handlerBlinkyTimer);
 
-	//Se carga la configuración
-	BasicTimer_Config(&handlerSampling);
+	handlerSampling.ptrTIMx                               = TIM4;
+	handlerSampling.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
+	handlerSampling.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100Mhz_10us;
+	handlerSampling.TIMx_Config.TIMx_period               = 500;
+	handlerSampling.TIMx_Config.TIMx_interruptEnable      = 1;
 
+	// Se carga la configuración
+	BasicTimer_Config(&handlerSampling);
 
 	/*	-	-	-	Pin para medir la frecuencia del micro (MCO_1)	-	-	-	*/
 	handlerMCO.pGPIOx								= GPIOA;
@@ -228,6 +281,37 @@ void initSystem(void){
 
 	// Se carga la configuración
 	USART_Config(&handlerCommTerminal);
+
+	/*	-	-	-	Protocolo I2C	-	-	-	*/
+
+	// Pines del acelerómetro
+	handlerI2cSCL.pGPIOx                                      = GPIOB;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinNumber               = PIN_8;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinMode                 = GPIO_MODE_ALTFN;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinOPType               = GPIO_OTYPE_OPENDRAIN;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinSpeed                = GPIO_OSPEED_FAST;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinPuPdControl          = GPIO_PUPDR_PULLUP;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinAltFunMode           = AF4;
+	GPIO_Config(&handlerI2cSCL);
+
+	handlerI2cSDA.pGPIOx                                      = GPIOB;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinNumber               = PIN_9;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinMode                 = GPIO_MODE_ALTFN;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinOPType               = GPIO_OTYPE_OPENDRAIN;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinSpeed                = GPIO_OSPEED_FAST;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinPuPdControl          = GPIO_PUPDR_PULLUP;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinAltFunMode           = AF4;
+	GPIO_Config(&handlerI2cSDA);
+
+	// Configuración del acelerómetro
+	handlerAccelerometer.ptrI2Cx                            = I2C1;
+	handlerAccelerometer.modeI2C                            = I2C_MODE_FM;
+	handlerAccelerometer.slaveAddress                       = ACCEL_ADDRESS;
+	handlerAccelerometer.mainClock							= MAIN_CLOCK_100_MHz_FOR_I2C;
+	handlerAccelerometer.maxI2C_FM							= I2C_MAX_RISE_TIME_FM_100MHz;
+	handlerAccelerometer.modeI2C_FM							= I2C_MODE_FM_SPEED_400KHz_100MHz;
+
+	i2c_config(&handlerAccelerometer);
 }
 
 /*	-	-	-	Función dedicada a los comandos	-	-	-	*/
@@ -254,7 +338,7 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "3) getTrimHSI - - - - - - - - - - - - - - Returns the current value of the HSI trim\n");
 		writeMsg(&handlerCommTerminal, "4) setMCO1Channel # - - - - - - - - - - - Set # as the active channel for the MCO1 (PA8). 0->HSI	1->LSE	2->PLL. Set as 2 by default.\n");
 		writeMsg(&handlerCommTerminal, "5) setMCO1PreScaler # - - - - - - - - - - Set # as the division factor for the active channel of MCO1 (PA8). # = {1, 2, 3, 4, 5}. Set as 5 by default\n");
-		writeMsg(&handlerCommTerminal, "6) sampleAccel - - - - - - - - - - - - -  Sample  and show acceleration values for 2 seconds\n");
+		writeMsg(&handlerCommTerminal, "6) sampleAccel - - - - - - - - - - - - -  Sample  and show 200 acceleration values\n");
 		writeMsg(&handlerCommTerminal, "7) Descripción del septimo comando\n");
 		writeMsg(&handlerCommTerminal, "8) Descripción del octavo comando\n");
 		writeMsg(&handlerCommTerminal, "9) Descripción del noveno comando\n");
@@ -345,10 +429,46 @@ void parseCommands(char *ptrBufferReception){
 		}
 
 	}
+
+	// 6) sampleAccel. Imprime 200 datos de aceleración
+	else if(strcmp(cmd,"sampleAccel") == 0){
+		// Se samplean 200 datos
+		writeMsg(&handlerCommTerminal, "Sampling data...\n" );
+		saveDatum();
+
+		sprintf(bufferData, "Axis Z data \n");
+		writeMsg(&handlerCommTerminal, bufferData);
+		sprintf(bufferData, "AccelZ = %.2f m/s^2 \n", z);
+		writeMsg(&handlerCommTerminal, bufferData);
+	}
 	else{
 		// Se imprime el mensaje "Wrong CMD" si la escritura no corresponde a los CMD implementados
 		writeMsg(&handlerCommTerminal, "Wrong CMD\n");
 	}
+}
+void saveDatum(void){
+	flag = 1;
+	if(interrupt <= 200){
+		AccelX_low =  i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_L);
+		AccelX_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_H);
+		AccelX = AccelX_high << 8 | AccelX_low;
+		AccelY_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_YOUT_L);
+		AccelY_high = i2c_readSingleRegister(&handlerAccelerometer,ACCEL_YOUT_H);
+		AccelY = AccelY_high << 8 | AccelY_low;
+		AccelZ_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_L);
+		AccelZ_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_H);
+		AccelZ = AccelZ_high << 8 | AccelZ_low;
+	}
+
+	// Conversión a m/s²
+	x = (AccelX/256.f)*9.78;
+	y = (AccelY/256.f)*9.78;
+	z = (AccelZ/256.f)*9.78;
+    dataAccel[0][interrupt] = x;
+    dataAccel[1][interrupt] = y;
+    dataAccel[2][interrupt] = z;
+
+    flag = 0;
 }
 
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
@@ -364,4 +484,14 @@ void usart6Rx_Callback(void){
 void BasicTimer2_Callback(void){
 	GPIOxTooglePin(&handlerLEDBlinky);
 }
+
+void BasicTimer4_Callback(void){
+	if(flag){
+		interrupt++;
+		if(interrupt == 200){
+			interrupt = 0;
+		}
+	}
+}
+
 /*	=	=	=	FIN DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
