@@ -86,23 +86,28 @@ uint8_t AccelZ_high 	= 0;
 int16_t AccelZ 			= 0;
 
 uint8_t i2cBuffer 		= {0};
-uint32_t interrupt	 	= 0;
-uint8_t flag			= 0;
+uint32_t dataCounter 	= 0;
+uint8_t flagSampling	= 0;
+uint8_t samplingEnable	= 0;
 
 float x,y,z;
-float dataAccel[3][200];
+float dataAccelX[600];
+float dataAccelY[600];
+float dataAccelZ[600];
 
 // Variables para el SysTick
 uint8_t systemTicks = 0;
 uint8_t systemTicksStart = 0;
 uint8_t systemTicksEnd = 0;
 
+// Variables auxiliares
+uint8_t flag_sampleAccel = 0;
 
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
 void initSystem(void);
 void tuneMCU(void);
 void parseCommands(char *ptrBufferReception);
-void saveDatum(void);
+void sampleAccel(void);
 /*	=	=	=	INICIO DEL MAIN	=	=	=	*/
 int main (void){
 	// Se afina el micro y se establecen los parámetros de operación correctos
@@ -146,11 +151,10 @@ int main (void){
 		}
 
 		// Hacemos un análisis de la cadena de datos obtenida
-		if (stringComplete){
+		else if (stringComplete){
 			parseCommands(bufferReception);
 			stringComplete = false;
 		}
-
 	}
 	return(0);
 }
@@ -234,8 +238,8 @@ void initSystem(void){
 
 	handlerSampling.ptrTIMx                               = TIM4;
 	handlerSampling.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
-	handlerSampling.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100Mhz_10us;
-	handlerSampling.TIMx_Config.TIMx_period               = 500;
+	handlerSampling.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100Mhz_100us;
+	handlerSampling.TIMx_Config.TIMx_period               = 50;
 	handlerSampling.TIMx_Config.TIMx_interruptEnable      = 1;
 
 	// Se carga la configuración
@@ -326,6 +330,7 @@ void parseCommands(char *ptrBufferReception){
 
 	// 1) help. Imprime una lista con todos los comandos disponibles
 	if(strcmp(cmd, "help") == 0){
+		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "HELP MENU - LIST OF AVAILABLE COMMANDS:\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "1) help - - - - - - - - - - - - - - - - - Print this menu\n");
@@ -338,37 +343,46 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "3) getTrimHSI - - - - - - - - - - - - - - Returns the current value of the HSI trim\n");
 		writeMsg(&handlerCommTerminal, "4) setMCO1Channel # - - - - - - - - - - - Set # as the active channel for the MCO1 (PA8). 0->HSI	1->LSE	2->PLL. Set as 2 by default.\n");
 		writeMsg(&handlerCommTerminal, "5) setMCO1PreScaler # - - - - - - - - - - Set # as the division factor for the active channel of MCO1 (PA8). # = {1, 2, 3, 4, 5}. Set as 5 by default\n");
-		writeMsg(&handlerCommTerminal, "6) sampleAccel - - - - - - - - - - - - -  Sample  and show 200 acceleration values\n");
-		writeMsg(&handlerCommTerminal, "7) Descripción del septimo comando\n");
+		writeMsg(&handlerCommTerminal, "6) sampleAccel - - - - - - - - - - - - -  Sample and store 6 seconds worth acceleration values at 200Hz. Needed before using fireUpFFT\n");
+		writeMsg(&handlerCommTerminal, "7) fireUpFFT - - - - - - - - - - - - - -  Use a Fast Fourier Transform to get a frequency using data from sampleAccel.\n");
 		writeMsg(&handlerCommTerminal, "8) Descripción del octavo comando\n");
 		writeMsg(&handlerCommTerminal, "9) Descripción del noveno comando\n");
 		writeMsg(&handlerCommTerminal, "10) Descripción del decimo comando\n");
+		writeMsg(&handlerCommTerminal, "\n");
 	}
 
 	// 2) trimHSI #. Le permite al usuario ajustar la frecuencia del HSI.
 	else if(strcmp(cmd, "setTrimHSI") == 0){
 		// Por si el usuario ingresa un número fuera del rango establecido
 		if(firstParameter < 0){
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Wrong input. Remember that trim values\n");
 			writeMsg(&handlerCommTerminal, "can only be between 0 and 20\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else if(firstParameter > 20){
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Wrong input. Remember that trim values\n");
 			writeMsg(&handlerCommTerminal, "can only be between 0 and 20\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		// Se hace el ajuste si todo está correcto
 		else{
 			RCC->CR &= ~(RCC_CR_HSITRIM);
 			RCC->CR |= firstParameter << RCC_CR_HSITRIM_Pos;
 			sprintf(bufferData, "Trim set at %u successfully. Default is 13.\n", firstParameter);
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, bufferData);
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 	}
 
 	// 3) getTrimHSI. Le permite al usuario conocer el valor actual del trim del HSI
 	else if(strcmp(cmd,"getTrimHSI") == 0){
 		sprintf(bufferData, "The current trim value is %u. Default is 13.\n", (int)RCC->CR >>3 & 0b11111);
+		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, bufferData);
+		writeMsg(&handlerCommTerminal, "\n");
 	}
 
 	// 4) setMCO1Channel #. Le permite al usuario establecer el canal activo para el MCO1 (PA8)
@@ -376,7 +390,9 @@ void parseCommands(char *ptrBufferReception){
 		if(firstParameter == 0){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1);
 			RCC->CFGR |= 0b00 << RCC_CFGR_MCO1_Pos;
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Active channel for the MCO1 (PA8) successfully set as HSI\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else if(firstParameter == 1){
 			// Se activa el LSE
@@ -385,15 +401,21 @@ void parseCommands(char *ptrBufferReception){
 			// Se selecciona el LSE
 			RCC->CFGR &= ~(RCC_CFGR_MCO1);
 			RCC->CFGR |= 0b01 << RCC_CFGR_MCO1_Pos;
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Active channel for the MCO1 (PA8) successfully set as LSE\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else if(firstParameter == 2){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1);
 			RCC->CFGR |= 0b11 << RCC_CFGR_MCO1_Pos;
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Active channel for the MCO1 (PA8) successfully set as PLL\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else{
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Channel selection not valid.\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 	}
 
@@ -402,73 +424,97 @@ void parseCommands(char *ptrBufferReception){
 		if(firstParameter == 1){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
 			RCC->CFGR |= 0b0 << RCC_CFGR_MCO1PRE_Pos;
-			writeMsg(&handlerCommTerminal, "Division factor for the active channel for the MCO1 (PA8) successfully set as 1\n");
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 1\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else if(firstParameter == 2){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
 			RCC->CFGR |= 0b100 << RCC_CFGR_MCO1PRE_Pos;
-			writeMsg(&handlerCommTerminal, "Division factor for the active channel for the MCO1 (PA8) successfully set as 2\n");
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 2\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else if(firstParameter == 3){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
 			RCC->CFGR |= 0b101 << RCC_CFGR_MCO1PRE_Pos;
-			writeMsg(&handlerCommTerminal, "Division factor for the active channel for the MCO1 (PA8) successfully set as 3\n");
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 3\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else if(firstParameter == 4){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
 			RCC->CFGR |= 0b110 << RCC_CFGR_MCO1PRE_Pos;
-			writeMsg(&handlerCommTerminal, "Division factor for the active channel for the MCO1 (PA8) successfully set as 4\n");
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 4\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else if(firstParameter == 5){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
 			RCC->CFGR |= 0b111 << RCC_CFGR_MCO1PRE_Pos;
-			writeMsg(&handlerCommTerminal, "Division factor for the active channel for the MCO1 (PA8) successfully set as 5\n");
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 5\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 		else{
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Division factor selection not valid.\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 
 	}
 
 	// 6) sampleAccel. Imprime 200 datos de aceleración
 	else if(strcmp(cmd,"sampleAccel") == 0){
-		// Se samplean 200 datos
-		writeMsg(&handlerCommTerminal, "Sampling data...\n" );
-		saveDatum();
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "Sampling acceleration...\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		// Se habilita el muestreo
+		samplingEnable = 1;
 
-		sprintf(bufferData, "Axis Z data \n");
-		writeMsg(&handlerCommTerminal, bufferData);
-		sprintf(bufferData, "AccelZ = %.2f m/s^2 \n", z);
-		writeMsg(&handlerCommTerminal, bufferData);
-	}
+		// Muestreo a 200Hz por 3 segundos
+		while(dataCounter < 600){
+			if(flagSampling){
+				// Se muestrea
+				sampleAccel();
+				// Se almacenan los datos
+				dataAccelX[dataCounter] = x;
+				dataAccelY[dataCounter] = y;
+				dataAccelZ[dataCounter] = z;
+
+				dataCounter++;
+				flagSampling = 0;
+				if(dataCounter == 600){
+					break;
+				}
+		    }
+	    }
+		samplingEnable = 0;
+		flag_sampleAccel = 1;
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "Data acquired and stored successfully!\n");
+		writeMsg(&handlerCommTerminal, "Command 'fireUpFFT' unlocked and ready to use.\n");
+		writeMsg(&handlerCommTerminal, "\n");
+     }
 	else{
 		// Se imprime el mensaje "Wrong CMD" si la escritura no corresponde a los CMD implementados
+		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "Wrong CMD\n");
+		writeMsg(&handlerCommTerminal, "\n");
 	}
 }
-void saveDatum(void){
-	flag = 1;
-	if(interrupt <= 200){
-		AccelX_low =  i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_L);
-		AccelX_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_H);
-		AccelX = AccelX_high << 8 | AccelX_low;
-		AccelY_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_YOUT_L);
-		AccelY_high = i2c_readSingleRegister(&handlerAccelerometer,ACCEL_YOUT_H);
-		AccelY = AccelY_high << 8 | AccelY_low;
-		AccelZ_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_L);
-		AccelZ_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_H);
-		AccelZ = AccelZ_high << 8 | AccelZ_low;
-	}
 
-	// Conversión a m/s²
-	x = (AccelX/256.f)*9.78;
-	y = (AccelY/256.f)*9.78;
-	z = (AccelZ/256.f)*9.78;
-    dataAccel[0][interrupt] = x;
-    dataAccel[1][interrupt] = y;
-    dataAccel[2][interrupt] = z;
-
-    flag = 0;
+// Función que retorna los valores de la acceleración en los 3 ejes del acelerómetro
+void sampleAccel(void){
+	AccelX_low =  i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_L);
+	AccelX_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_H);
+	x = AccelX_high << 8 | AccelX_low;
+	AccelY_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_YOUT_L);
+	AccelY_high = i2c_readSingleRegister(&handlerAccelerometer,ACCEL_YOUT_H);
+	y = AccelY_high << 8 | AccelY_low;
+	AccelZ_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_L);
+	AccelZ_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_H);
+	z = AccelZ_high << 8 | AccelZ_low;
 }
 
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
@@ -486,11 +532,8 @@ void BasicTimer2_Callback(void){
 }
 
 void BasicTimer4_Callback(void){
-	if(flag){
-		interrupt++;
-		if(interrupt == 200){
-			interrupt = 0;
-		}
+	if(samplingEnable){
+		flagSampling = 1;
 	}
 }
 
