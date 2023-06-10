@@ -1,10 +1,13 @@
-/*
- * AdcDriver.c
- *
- *  Created on: Month XX, 2022
- *      Author: namontoy
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : ADCDriver.c
+ * @brief    : Archivo de fuente del driver del periférico ADC
+ * **************************************************************************************************
  */
-#include "AdcDriver.h"
+
+
+#include <ADCDriver.h>
 #include "GPIOxDriver.h"
 
 GPIO_Handler_t handlerAdcPin = {0};
@@ -12,8 +15,10 @@ uint16_t	adcRawData = 0;
 
 void adc_Config(ADC_Config_t *adcConfig){
 	/* 1. Configuramos el PinX para que cumpla la función de canal análogo deseado. */
-	configAnalogPin(adcConfig->channel);
 
+	for(uint8_t i = 0;i<adcConfig->numberOfChannels;i++){
+		configAnalogPin(adcConfig->channels[i]);
+	}
 	/* 2. Activamos la señal de reloj para el periférico ADC1 (bus APB2)*/
 	// Escriba su código acá
 	RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
@@ -56,8 +61,12 @@ void adc_Config(ADC_Config_t *adcConfig){
 	}
 	}
 
-	/* 4. Configuramos el modo Scan como desactivado */
-	ADC1->CR1 &= ~ADC_CR1_SCAN;
+	/* 4. Configuramos el modo Scan como desactivado si es solo un canal */
+	if(adcConfig->numberOfChannels == 1){
+		ADC1->CR1 &= ~ADC_CR1_SCAN;
+	}else{
+		ADC1->CR1 |= ADC_CR1_SCAN;
+	}
 
 	/* 5. Configuramos la alineación de los datos (derecha o izquierda) */
 	if(adcConfig->dataAlignment == ADC_ALIGNMENT_RIGHT){
@@ -73,28 +82,59 @@ void adc_Config(ADC_Config_t *adcConfig){
 
 
 	/* 7. Acá se debería configurar el sampling...*/
-	if(adcConfig->channel <= ADC_CHANNEL_9){
-		ADC1->SMPR2 |= adcConfig->samplingPeriod<<(adcConfig->channel*3);
-	}
-	else{
-		ADC1->SMPR1 |= adcConfig->samplingPeriod<<((adcConfig->channel%10)*3);
+	for(uint8_t i = 0;i<adcConfig->numberOfChannels;i++){
+		if(adcConfig->channels[i] <= ADC_CHANNEL_9){
+			ADC1->SMPR2 |= adcConfig->samplingPeriods[i]<<(adcConfig->channels[i]*3);
+		}
+		else{
+			ADC1->SMPR1 |= adcConfig->samplingPeriods[i]<<((adcConfig->channels[i]%10)*3);
+		}
 	}
 
 	/* 8. Configuramos la secuencia y cuantos elementos hay en la secuencia */
-	// Al hacerlo todo 0, estamos seleccionando solo 1 elemento en el conteo de la secuencia
-	ADC1->SQR1 = 0;
+	if(adcConfig->numberOfChannels==1){
+		// Al hacerlo todo 0, estamos seleccionando solo 1 elemento en el conteo de la secuencia
+		ADC1->SQR1 = 0;
 
-	// Asignamos el canal de la conversión a la primera posición en la secuencia
-	ADC1->SQR3 |= (adcConfig->channel << 0);
+		// Asignamos el canal de la conversión a la primera posición en la secuencia
+		ADC1->SQR3 |= (adcConfig->channels[0] << 0);
+	}else{
+		//Se le asigna el valor del size-1 a L para decir que se harán L conversiones
+		ADC1->SQR1 |= (adcConfig->numberOfChannels-1)<<ADC_SQR1_L_Pos;
+		for(uint8_t i = 0;i<adcConfig->numberOfChannels;i++){
+			if(i<=5){
+				ADC1->SQR3|=adcConfig->channels[i]<<(i*5);
+			}else if(i>5 && i<=11){
+				ADC1->SQR2|=adcConfig->channels[i]<<((i%6)*5);
+			}else if(i>11 && i<=15){
+				ADC1->SQR1|=adcConfig->channels[i]<<((i%12)*5);
+			}
+			if(adcConfig->channels[i] <= ADC_CHANNEL_9){
+				ADC1->SMPR2 |= adcConfig->samplingPeriods[i]<<(adcConfig->channels[i]*3);
+			}
+			else{
+				ADC1->SMPR1 |= adcConfig->samplingPeriods[i]<<((adcConfig->channels[i]%10)*3);
+			}
+		}
+	}
 
-	/* 9. Configuramos el preescaler del ADC en 2:1 (el mas rápido que se puede tener */
+	/* 9. Configuramos el preescaler del ADC en 4:1 (el mas rápido que se puede tener */
+	//Dependiendo la velocidad del micro divida por 4 o por 2
 	ADC->CCR |= ADC_CCR_ADCPRE_0;
+
+	//Se configura el exten o el extsel
+	if(adcConfig->exten!=0){
+		ADC1->CR2 |= adcConfig->exten<<ADC_CR2_EXTEN_Pos;
+		ADC1->CR2 |= adcConfig->extsel<<ADC_CR2_EXTSEL_Pos;
+	}
 
 	/* 10. Desactivamos las interrupciones globales */
 	__disable_irq();
 
 	/* 11. Activamos la interrupción debida a la finalización de una conversión EOC (CR1)*/
 	ADC1->CR1 |= ADC_CR1_EOCIE;
+	//11.1 se activa interrupción por final de conversión de cada canal
+	ADC1->CR2 |= ADC_CR2_EOCS;
 
 	/* 11a. Matriculamos la interrupción en el NVIC*/
 	__NVIC_EnableIRQ(ADC_IRQn);
@@ -125,7 +165,6 @@ void startSingleADC(void){
 	
 	/* Iniciamos un ciclo de conversión ADC (CR2)*/
 	ADC1->CR2 |= ADC_CR2_SWSTART;
-
 }
 
 /* 

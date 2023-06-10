@@ -1,8 +1,9 @@
-/*
- * AdcDriver.h
- *
- *  Created on: Month XX, 2022
- *      Author: namontoy
+/**
+ * **************************************************************************************************
+ * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
+ * @author   : ADCDriver.h
+ * @brief    : Archivo de cabecera del driver del periférico ADC
+ * **************************************************************************************************
  */
 
 #ifndef INC_ADCDRIVER_H_
@@ -47,11 +48,14 @@
 
 typedef struct
 {
-	uint8_t		channel;		// Canal ADC que será utilizado para la conversión ADC
 	uint8_t		resolution;		// Precisión con la que el ADC hace la adquisición del dato
-	uint16_t	samplingPeriod;	// Tiempo deseado para hacer la adquisición del dato
 	uint8_t		dataAlignment;	// Alineación a la izquierda o a la derecha
 	uint16_t	adcData;			//Dato de la conversión
+	uint8_t		numberOfChannels;
+	uint8_t		channels[16];		// Canal ADC que será utilizado para la conversión ADC
+	uint16_t	samplingPeriods[16];	// Tiempo deseado para hacer la adquisición del dato
+	uint8_t 	exten;
+	uint16_t  	extsel;
 }ADC_Config_t;
 
 void adc_Config(ADC_Config_t *adcConfig);

@@ -9,7 +9,7 @@
 #include "PwmDriver.h"
 #include "BasicTimer.h"
 
-/**/
+
 void pwm_Config(PWM_Handler_t *ptrPwmHandler){
 
 	/* 1. Activar la señal de reloj del periférico requerido */
@@ -41,22 +41,7 @@ void pwm_Config(PWM_Handler_t *ptrPwmHandler){
 
 	/* 2a. Estamos en UP_Mode, el limite se carga en ARR y se comienza en 0 */
 
-//	if(ptrTimerPWM== TIM2 || ptrPwmHandler->ptrTIMx == TIM5){
-//		// Configurar el registro que nos controla el modo up or down
-//		ptrTimerPWM->CR1 &= ~TIM_CR1_DIR;
-//		/* Reiniciamos el registro counter*/  //REVISAR COMO PONERLO PARA LOS 32 BITS
-//		ptrTimerPWM->CNT = 0;
-//	}
-//	else if(ptrTimerPWM == TIM3 || ptrPwmHandler->ptrTIMx == TIM4){
-//		// Configurar el registro que nos controla el modo up or down
-//		ptrTimerPWM->CR1 &= ~TIM_CR1_DIR;
-//		/* Reiniciamos el registro counter*/
-//		ptrTimerPWM->ptrTIMx->CNT = 0;
-//	}
-
 	ptrPwmHandler->ptrTIMx->ARR &= ~(TIM_CR1_DIR);
-//	ptrPwmHandler->ptrTIMx->CR1 &= ~TIM_CR1_DIR;
-//	ptrPwmHandler->ptrTIMx->CNT = 0;
 
 	/* 3. Configuramos los bits CCxS del registro TIMy_CCMR1, de forma que sea modo salida
 	 * (para cada canal hay un conjunto CCxS)
@@ -69,16 +54,12 @@ void pwm_Config(PWM_Handler_t *ptrPwmHandler){
 	case PWM_CHANNEL_1:{
 		// Seleccionamos como salida el canal
 		ptrPwmHandler->ptrTIMx->CCMR1 &= ~TIM_CCMR1_CC1S;
-		// Output compare 1 fast enable Eficiencia
-//		ptrPwmHandler->ptrTIMx->CCMR1 |= TIM_CCMR1_OC1FE;
 		// Output compare 1 preload enable
 		ptrPwmHandler->ptrTIMx->CCMR1 |= TIM_CCMR1_OC1PE;
 		// Output compare 1 mode (110)
 		ptrPwmHandler->ptrTIMx->CCMR1 &= ~TIM_CCMR1_OC1M_0;
 		ptrPwmHandler->ptrTIMx->CCMR1 |= TIM_CCMR1_OC1M_1;
 		ptrPwmHandler->ptrTIMx->CCMR1 |= TIM_CCMR1_OC1M_2;
-		// Polaridad high
-//		ptrPwmHandler->ptrTIMx->CCER &= ~TIM_CCER_CC1P;
 		break;
 	}
 
@@ -179,11 +160,6 @@ void enableOutput(PWM_Handler_t *ptrPwmHandler) {
 	}
 }
 
-/*
- * La frecuencia es definida por el conjunto formado por el preescaler (PSC)
- * y el valor límite al que llega el Timer (ARR), con estos dos se establece
- * la frecuencia.
- * */
 void setFrequency(PWM_Handler_t *ptrPwmHandler){
 	// Cargamos el valor del prescaler, nos define la velocidad (en ns) a la cual
 	// se incrementa el Timer
@@ -209,23 +185,11 @@ void setFrequency(PWM_Handler_t *ptrPwmHandler){
 	// Cargamos el valor del ARR, el cual es el límite de incrementos del Timer
 	// antes de hacer un update y reload.
 	ptrPwmHandler->ptrTIMx->ARR = ptrPwmHandler->config.periodo;
-
-
-
-//	// Cargamos el valor del prescaler, nos define la velocidad (en ns) a la cual
-//	// se incrementa el Timer
-//	ptrPwmHandler->ptrTIMx->PSC = ptrPwmHandler->config.prescaler;
-//	// Cargamos el valor del ARR, el cual es el límite de incrementos del Timer
-//	// antes de hacer un update y reload.
-//	ptrPwmHandler->ptrTIMx->ARR = (ptrPwmHandler->config.periodo) -1;
-//	// Activamos la funcionalidad de pre-load
-//	ptrPwmHandler->ptrTIMx->CR1 |= TIM_CR1_ARPE;
 }
 
 /* Función para actualizar la frecuencia, funciona de la mano con setFrequency */
 void updateFrequency(PWM_Handler_t *ptrPwmHandler, uint16_t newFreq){
 //	// Actualizamos el registro que manipula el periodo
-//	ptrPwmHandler->config.periodo = newFreq;
 	ptrPwmHandler->ptrTIMx->ARR = newFreq;
 	// Llamamos a la función que cambia la frecuencia
 	setFrequency(ptrPwmHandler);

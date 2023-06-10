@@ -18,13 +18,13 @@
 
 #include "GPIOxDriver.h"
 #include "BasicTimer.h"
-#include "ExtiDriver.h"
 #include "USARTxDriver.h"
 #include "SysTickDriver.h"
 #include "I2CDriver.h"
 #include "PwmDriver.h"
 #include "PLLDriver.h"
 #include "RTCDriver.h"
+#include "ADCDriver.h"
 
 #include "arm_math.h"
 
@@ -71,6 +71,12 @@ I2C_Handler_t handlerAccelerometer = {0};
 // Handler del RTC
 RTC_Config_t rtcConfig = {0};
 
+// Handlers del ADC
+ADC_Config_t adcConfig ={0};
+
+// Handlers del PWM
+PWM_Handler_t handlerSignalPwm1 = {0};
+
 /*	-	-	-	Definición de variables	-	-	-	*/
 
 // Variables de la comunicación serial por comandos
@@ -111,6 +117,13 @@ arm_status statusInitFFT = ARM_MATH_ARGUMENT_ERROR;
 // Variables para el RTC
 uint8_t calendar[6] = {0};
 
+// Variables para el ADC
+uint16_t adcData1[256] = {0};
+uint16_t adcData2[256] = {0};
+uint16_t adcDataCounter = 0;
+uint8_t adcCounter = 0;
+bool adcIsComplete = false;
+
 // Variables para el SysTick
 uint8_t systemTicks = 0;
 uint8_t systemTicksStart = 0;
@@ -118,6 +131,7 @@ uint8_t systemTicksEnd = 0;
 
 // Variables auxiliares
 uint8_t flag_sampleAccel = 0;
+uint8_t flag_startADC	 = 0;
 
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
 void initSystem(void);
@@ -170,6 +184,16 @@ int main (void){
 		else if (stringComplete){
 			parseCommands(bufferReception);
 			stringComplete = false;
+		}
+		if(adcIsComplete){
+			for(int contador = 0; contador<256; contador++){
+				sprintf(bufferData,"%u\t%u \n",(unsigned int)adcData1[contador],(unsigned int)adcData2[contador]);
+				writeMsg(&handlerCommTerminal,bufferData);
+			}
+			adcIsComplete = false;
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Switch to 'chart' mode in CoolTerm to check out the plot of the ADC.\n");
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 	}
 	return(0);
@@ -332,6 +356,35 @@ void initSystem(void){
 	handlerAccelerometer.modeI2C_FM							= I2C_MODE_FM_SPEED_400KHz_100MHz;
 
 	i2c_config(&handlerAccelerometer);
+
+	/*	-	-	-	ADC	-	-	-	*/
+
+	// Configuración de la conversión análoga-digital
+	adcConfig.dataAlignment 		= ADC_ALIGNMENT_RIGHT;
+	adcConfig.resolution 			= ADC_RESOLUTION_12_BIT;
+	adcConfig.channels[0] 			= ADC_CHANNEL_0;
+	adcConfig.channels[1] 			= ADC_CHANNEL_1;
+	adcConfig.samplingPeriods[0] 	= ADC_SAMPLING_PERIOD_112_CYCLES;
+	adcConfig.samplingPeriods[1] 	= ADC_SAMPLING_PERIOD_112_CYCLES;
+	adcConfig.numberOfChannels 		= 2;
+	adcConfig.extsel 				= 0b1100;
+	adcConfig.exten 				= 1;
+
+	// Se carga la configuración
+	adc_Config(&adcConfig);
+
+	/*	-	-	-	PWM	-	-	-	*/
+
+	// Configuración para el correcto muestreo de la ADC
+	handlerSignalPwm1.ptrTIMx                = TIM5;
+	handlerSignalPwm1.config.channel         = PWM_CHANNEL_3;
+	handlerSignalPwm1.config.duttyCicle      = 1;
+	handlerSignalPwm1.config.periodo         = 10;
+	handlerSignalPwm1.config.prescaler       = 100;
+
+	// Se carga la configuración y se hablita la señal
+	pwm_Config(&handlerSignalPwm1);
+	enableOutput(&handlerSignalPwm1);
 }
 
 /*	-	-	-	Función dedicada a los comandos	-	-	-	*/
@@ -349,25 +402,56 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "HELP MENU - LIST OF AVAILABLE COMMANDS:\n");
 		writeMsg(&handlerCommTerminal, "\n");
-		writeMsg(&handlerCommTerminal, "1) help - - - - - - - - - - - - - - - - - Print this menu\n");
-		writeMsg(&handlerCommTerminal, "2) setTrimHSI # - - - - - - - - - - - - - Set # as the trim value for the HSI (0 < # < 20)\n");
-		writeMsg(&handlerCommTerminal, "This command can be used  by the user to manually calibrate the HSI (MCUs internal clock signal)\n");
-		writeMsg(&handlerCommTerminal, "to compensate the frequency changes caused by external factors.\n");
-		writeMsg(&handlerCommTerminal, "This trim can take values between 0 and 20, and each unit increase or decrease is equal to 48kHz (approximately)\n");
-		writeMsg(&handlerCommTerminal, "The MCU is calibrated by default with a trim of 13, aimed at an HSI frequency of 100MHz.\n");
-		writeMsg(&handlerCommTerminal, "It's strongly recommended to keep the trim at 13. Nevertheless, the user can adjust accordingly.\n");
-		writeMsg(&handlerCommTerminal, "3) getTrimHSI - - - - - - - - - - - - - - Returns the current value of the HSI trim\n");
-		writeMsg(&handlerCommTerminal, "4) setMCO1Channel # - - - - - - - - - - - Set # as the active channel for the MCO1 (PA8). 1->HSI ; 2->LSE ; 3->PLL. Set as 3 by default.\n");
-		writeMsg(&handlerCommTerminal, "5) setMCO1PreScaler # - - - - - - - - - - Set # as the division factor for the active channel of MCO1 (PA8). # = {1, 2, 3, 4, 5}. Set as 5 by default\n");
-		writeMsg(&handlerCommTerminal, "6) setDate #DD #MM #YY - - - - - - - - -  Set #DD/#MM/#YY as the current day for the RTC.\n");
-		writeMsg(&handlerCommTerminal, "7) setTime #hh #mm #ss - - - - - - - - -  Set #hh:#mm:#ss as the current time (in 24h format) for the RTC.\n");
-		writeMsg(&handlerCommTerminal, "8) getDate - - - - - - - - - - - - - - -  Returns the current date of the RTC.\n");
-		writeMsg(&handlerCommTerminal, "9) getTime - - - - - - - - - - - - - - -  Returns the current time of the RTC (in 24h format).\n");
-		writeMsg(&handlerCommTerminal, "10) getDateTime - - - - - - - - - - - - - Returns the current date and time of the RTC (in 24h format).\n");
-		writeMsg(&handlerCommTerminal, "9) sampleAccel - - - - - - - - - - - - -  Sample and store 6 seconds worth acceleration values at 200Hz. Needed before using fireUpFFT\n");
-		writeMsg(&handlerCommTerminal, "10) fireUpFFT - - - - - - - - - - - - - - Use a Fast Fourier Transform to get a frequency using data from sampleAccel.\n");
-		writeMsg(&handlerCommTerminal, "11) showAccel - - - - - - - - - - - - - - Shows a 20 value sample for the acceleration data\n");
+		writeMsg(&handlerCommTerminal, "1) help - - - - - - - - - - - - - - - - - - Print this menu\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "2) setTrimHSI #\n");
+		writeMsg(&handlerCommTerminal, "Set # as the trim value for the HSI (0 < # < 20). This command can be used  by the user to manually calibrate\n");
+		writeMsg(&handlerCommTerminal, "the HSI (MCUs internal clock signal) to compensate the frequency hanges caused by external factors.\n");
+		writeMsg(&handlerCommTerminal, "his trim can take values between 0 and 20, and each unit increase or decrease is equal to 48kHz (approximately).\n");
+		writeMsg(&handlerCommTerminal, "The MCU is calibrated by default with a trim of 13, aimed at an HSI frequency of 100MHz. It's strongly recommended\n");
+		writeMsg(&handlerCommTerminal, "to keep the trim at 13. Nevertheless, the user can adjust accordingly.\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "3) getTrimHSI\n");
+		writeMsg(&handlerCommTerminal, "Returns the current value of the HSI trim\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "4) setMCO1Channel #\n");
+		writeMsg(&handlerCommTerminal, "Set # as the active channel for the MCO1 (PA8). 1->HSI ; 2->LSE ; 3->PLL. Set as 3 by default.\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "5) setMCO1PreScaler #\n");
+		writeMsg(&handlerCommTerminal, "Set # as the division factor for the active channel of MCO1 (PA8). # = {1, 2, 3, 4, 5}. Set as 5 by default\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "6) setDate #DD #MM #YY\n");
+		writeMsg(&handlerCommTerminal, "Set #DD/#MM/#YY as the current day for the RTC.\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "7) setTime #hh #mm #ss\n");
+		writeMsg(&handlerCommTerminal, "Set #hh:#mm:#ss as the current time (in 24h format) for the RTC.\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "8) getDate\n");
+		writeMsg(&handlerCommTerminal, "Returns the current date of the RTC.\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "9) getTime\n");
+		writeMsg(&handlerCommTerminal, "Returns the current time of the RTC (in 24h format).\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "10) getDateTime - - - - - - - - - - - - - - Returns the current date and time of the RTC (in 24h format).\n");
+		writeMsg(&handlerCommTerminal, "Returns the current date and time of the RTC (in 24h format).\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "11) setADCFrequency #\n");
+		writeMsg(&handlerCommTerminal, "Using the frequency # (in Hz) of the signal to be analyzed, sets adequate analog-to-digital conversion speed.\n");
+		writeMsg(&handlerCommTerminal, "It can take integer values between 800 and 1500. Executing this commands unlocks 'startADC'.\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "12) startADC\n");
+		writeMsg(&handlerCommTerminal, "Initializes the analog-to-digital conversion");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "13) sampleAccel\n");
+		writeMsg(&handlerCommTerminal, "Sample and store 512 acceleration values for the z-axis at 200Hz. Needed before using fireUpFFT\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "14) showAccel\n");
+		writeMsg(&handlerCommTerminal, "Shows a sample of 20 for the acceleration data\n");
+		writeMsg(&handlerCommTerminal, "\n");
+		writeMsg(&handlerCommTerminal, "10) fireUpFFT\n");
+		writeMsg(&handlerCommTerminal, "Use a Fast Fourier Transform to get a frequency using data from sampleAccel.\n");
 		writeMsg(&handlerCommTerminal, "12) EMPTY\n");
+		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "13) EMPTY\n");
 		writeMsg(&handlerCommTerminal, "\n");
 	}
@@ -912,23 +996,73 @@ void parseCommands(char *ptrBufferReception){
 	else if(strcmp(cmd,"getDate") == 0){
 			RTC_read(calendar);
 			sprintf(bufferData,"Current date set as: %u/%u/%u\n",calendar[4],calendar[5],calendar[6]);
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal,bufferData);
+			writeMsg(&handlerCommTerminal, "\n");
 	}
 
 	// 9) getTime. Entrega la hora actual del RTC
 	else if(strcmp(cmd,"getTime") == 0){
 			RTC_read(calendar);
 			sprintf(bufferData,"Current time (in 24h format) set as: %u:%u:%u\n",calendar[2],calendar[1],calendar[0]);
+			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal,bufferData);
+			writeMsg(&handlerCommTerminal, "\n");
 		}
 
 	// 10) getDateTime. Entrega la hora y fecha actuales del RTC
 	else if(strcmp(cmd,"getDateTime") == 0){
 		RTC_read(calendar);
 		sprintf(bufferData,"Current date and time (in 24h format) set as: %u/%u/%u  %u:%u:%u\n",calendar[4],calendar[5],calendar[6],calendar[2],calendar[1],calendar[0]);
+		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal,bufferData);
+		writeMsg(&handlerCommTerminal, "\n");
 	}
-	// 8) sampleAccel. Toma 600 datos de aceleración
+
+	// 11) setADCFrequency. Recibe la frecuencia de la señal a analizar y establece la velocidad del ADC adecuadamente
+	else if(strcmp(cmd,"setADCFrequency") == 0){
+		if(firstParameter >= 800 && firstParameter <= 1500){
+			// Frecuencia dentro del rango aceptado
+			uint16_t adcFrequency = (1 / (firstParameter * 0.00001));
+			updateFrequency(&handlerSignalPwm1,adcFrequency);
+
+			sprintf(bufferData,"ADC successfully configured to read a signal of up to %u Hz",firstParameter);
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, bufferData);
+			writeMsg(&handlerCommTerminal, "\n");
+
+			// Se reinicia el parámetro
+			firstParameter = 0;
+			// Se levanta la bandera
+			flag_startADC = 1;
+		}
+		else{
+			// Frecuencia fuera del rango aceptado
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Frequency value not accepted. Frequency values can range from 800 to 1500\n");
+			writeMsg(&handlerCommTerminal, "\n");
+		}
+	}
+
+	// 12) startADC. Inicializa la conversión ADC
+	else if(strcmp(cmd,"startADC") == 0){
+		if(flag_startADC){
+			// Freciencia declarada
+			startPwmSignal(&handlerSignalPwm1);
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Analog-to-digital conversion initialized successfully!\n");
+			writeMsg(&handlerCommTerminal, "\n");
+
+			// Se baja la bandera para obligar a cargar la frecuencia
+			flag_startADC = 0;
+		}
+		else{
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Command locked. Use setADCFrequency first to declare the frequency of your signal.\n");
+			writeMsg(&handlerCommTerminal, "\n");
+		}
+	}
+	// 13) sampleAccel. Toma 600 datos de aceleración
 	else if(strcmp(cmd,"sampleAccel") == 0){
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "Sampling acceleration...\n");
@@ -960,7 +1094,7 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "Command 'fireUpFFT' unlocked and ready to use.\n");
 		writeMsg(&handlerCommTerminal, "\n");
      }
-	// 9) fireUpFFT. Permite al usuario calcular la frecuencia fundamental detectada por el acelerómetro
+	// 14) fireUpFFT. Permite al usuario calcular la frecuencia fundamental detectada por el acelerómetro
 	else if(strcmp(cmd,"fireUpFFT") == 0){
 		if(flag_sampleAccel){
 			writeMsg(&handlerCommTerminal, "\n");
@@ -1042,7 +1176,7 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 		}
 	}
-	// 10) showAccel
+	// 15) showAccel
 	else if(strcmp(cmd, "showAccel") == 0){
 		for (int i = 0;i<20; i++){
 			sprintf(bufferData, "Accel = x %.5f; y %.5f; z %.5f ; #Datum %d \n", dataAccelX[i], dataAccelY[i], dataAccelZ[i], i+1);
@@ -1092,6 +1226,25 @@ void BasicTimer2_Callback(void){
 void BasicTimer4_Callback(void){
 	if(samplingEnable){
 		flagSampling = 1;
+	}
+}
+
+/* Callback del ADC */
+void adcComplete_Callback(void){
+	if(adcCounter == 0){
+		adcData1[adcDataCounter]=getADC();
+	}else{
+		adcData2[adcDataCounter]=getADC();
+		adcDataCounter++;
+	}
+	adcCounter++;
+	if(adcDataCounter == 256){
+		adcDataCounter = 0;
+		stopPwmSignal(&handlerSignalPwm1);
+		adcIsComplete = true;
+	}
+	if(adcCounter == 2){
+		adcCounter = 0;
 	}
 }
 
