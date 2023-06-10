@@ -107,12 +107,18 @@ uint8_t flagSampling	= 0;
 uint8_t samplingEnable	= 0;
 
 float x,y,z;
-float32_t dataAccelX[600] = {0};
-float32_t dataAccelY[600] = {0};
-float32_t dataAccelZ[600] = {0};
+float32_t dataAccelX[512] = {0};
+float32_t dataAccelY[512] = {0};
+float32_t dataAccelZ[512] = {0};
 
 // Variables para la implementación de la FFT
 arm_status statusInitFFT = ARM_MATH_ARGUMENT_ERROR;
+
+float32_t outputX[1024] = {0}, outputY[1024] = {0},outputZ[1024] = {0};
+
+float32_t	maxValueX = 0, maxValueY = 0, maxValueZ = 0;
+uint32_t 	maxIndexX = 0, maxIndexY = 0, maxIndexZ = 0, maxIndex = 0;
+uint16_t 	dominantFreq = 420;
 
 // Variables para el RTC
 uint8_t calendar[6] = {0};
@@ -253,8 +259,8 @@ void initSystem(void){
 	/*	-	-	-	Led de estado (Blinky)	-	-	-	*/
 
 	// Configuracion del LED2
-	handlerLEDBlinky.pGPIOx                             = GPIOA;
-	handlerLEDBlinky.GPIO_PinConfig.GPIO_PinNumber      = PIN_5;
+	handlerLEDBlinky.pGPIOx                             = GPIOH;
+	handlerLEDBlinky.GPIO_PinConfig.GPIO_PinNumber      = PIN_1;
 	handlerLEDBlinky.GPIO_PinConfig.GPIO_PinMode        = GPIO_MODE_OUT;
 	handlerLEDBlinky.GPIO_PinConfig.GPIO_PinOPType      = GPIO_OTYPE_PUSHPULL;
 	handlerLEDBlinky.GPIO_PinConfig.GPIO_PinSpeed       = GPIO_OSPEED_FAST;
@@ -432,7 +438,7 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "9) getTime\n");
 		writeMsg(&handlerCommTerminal, "Returns the current time of the RTC (in 24h format).\n");
 		writeMsg(&handlerCommTerminal, "\n");
-		writeMsg(&handlerCommTerminal, "10) getDateTime - - - - - - - - - - - - - - Returns the current date and time of the RTC (in 24h format).\n");
+		writeMsg(&handlerCommTerminal, "10) getDateTime\n");
 		writeMsg(&handlerCommTerminal, "Returns the current date and time of the RTC (in 24h format).\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "11) setADCFrequency #\n");
@@ -440,19 +446,16 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "It can take integer values between 800 and 1500. Executing this commands unlocks 'startADC'.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "12) startADC\n");
-		writeMsg(&handlerCommTerminal, "Initializes the analog-to-digital conversion");
+		writeMsg(&handlerCommTerminal, "Initializes the analog-to-digital conversion.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "13) sampleAccel\n");
 		writeMsg(&handlerCommTerminal, "Sample and store 512 acceleration values for the z-axis at 200Hz. Needed before using fireUpFFT\n");
+		writeMsg(&handlerCommTerminal, "The MCU must be reset each time a new data set is sampled.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "14) showAccel\n");
 		writeMsg(&handlerCommTerminal, "Shows a sample of 20 for the acceleration data\n");
 		writeMsg(&handlerCommTerminal, "\n");
-		writeMsg(&handlerCommTerminal, "10) fireUpFFT\n");
-		writeMsg(&handlerCommTerminal, "Use a Fast Fourier Transform to get a frequency using data from sampleAccel.\n");
-		writeMsg(&handlerCommTerminal, "12) EMPTY\n");
-		writeMsg(&handlerCommTerminal, "\n");
-		writeMsg(&handlerCommTerminal, "13) EMPTY\n");
+		writeMsg(&handlerCommTerminal, "15) fireUpFFT\n");
 		writeMsg(&handlerCommTerminal, "\n");
 	}
 
@@ -1071,20 +1074,16 @@ void parseCommands(char *ptrBufferReception){
 		samplingEnable = 1;
 
 		// Muestreo a 200Hz por 3 segundos
-		while(dataCounter < 600){
-			if(flagSampling){
-				// Se muestrea
+		while(dataCounter < 512){
+				// Se samplea
 				sampleAccel();
 				// Se almacenan los datos
 				dataAccelX[dataCounter] = x;
 				dataAccelY[dataCounter] = y;
 				dataAccelZ[dataCounter] = z;
 
-				dataCounter++;
-				flagSampling = 0;
-				if(dataCounter == 600){
+				if(dataCounter == 512){
 					break;
-				}
 		    }
 	    }
 		samplingEnable = 0;
@@ -1100,21 +1099,6 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Making Fourier proud...\n");
 			writeMsg(&handlerCommTerminal, "\n");
-
-			// Se definen los buffer de entrada y de salida
-			float32_t outputX[1024] = {0}, outputY[1024] = {0},outputZ[1024] = {0};
-
-			// Se definen las variables para obtener los máximos de cada eje, el máximo absoluto y la frecuencia predominante
-			float32_t	maxValueX = 0, maxValueY = 0, maxValueZ = 0;
-			uint32_t 	maxIndexX = 0, maxIndexY = 0, maxIndexZ = 0, maxIndex = 0;
-			uint16_t 	dominantFreq = 420;
-
-			// Se castean los valores obtenidos para el acelerómetro
-//			for(int i; i < 600; i++){
-//				inputX[i] = dataAccelX[i];
-//				inputY[i] = dataAccelY[i];
-//				inputZ[i] = dataAccelZ[i];
-//			}
 
 			// Se inicializa la transformada
 			arm_rfft_fast_instance_f32 fftInstance;
@@ -1153,13 +1137,14 @@ void parseCommands(char *ptrBufferReception){
 							// Se calcula la frecuencia dominante
 							dominantFreq = (maxIndex*200) / FFT_SIZE;
 							sprintf(bufferData, "The dominant frequency in the data is %u", dominantFreq);
-							delay_ms(1500);
-
 							writeMsg(&handlerCommTerminal, "\n");
 							writeMsg(&handlerCommTerminal, "FFT executed successfully!\n");
 							writeMsg(&handlerCommTerminal, "\n");
 							writeMsg(&handlerCommTerminal, bufferData);
 							writeMsg(&handlerCommTerminal, "\n");
+
+							// Se baja el flag del sampling para la nueva toma de datos
+							flag_sampleAccel = 0;
 
 
 			}else{
@@ -1220,14 +1205,22 @@ void usart6Rx_Callback(void){
 
 /* Callbacks de los Timers */
 void BasicTimer2_Callback(void){
+	// Timer encargado del blinky
 	GPIOxTooglePin(&handlerLEDBlinky);
 }
 
 void BasicTimer4_Callback(void){
+	// Timer encargado del muestreo a 200Hz
 	if(samplingEnable){
-		flagSampling = 1;
+		if(dataCounter <= 512){
+			dataCounter++;
+		}
+		else{
+			dataCounter = 0;
+		}
 	}
 }
+
 
 /* Callback del ADC */
 void adcComplete_Callback(void){
