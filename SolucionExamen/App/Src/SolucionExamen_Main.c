@@ -24,9 +24,13 @@
 #include "I2CDriver.h"
 #include "PwmDriver.h"
 #include "PLLDriver.h"
+#include "RTCDriver.h"
+
+#include "arm_math.h"
 
 /*	-	-	-	Definición de las macros a utilizar	-	-	-	*/
 
+// Macros para la implementación del acelerómetro
 #define ACCEL_ADDRESS          	 0x1D
 #define ACCEL_XOUT_L             50
 #define ACCEL_XOUT_H             51
@@ -38,6 +42,9 @@
 #define BW_RATE                  44
 #define POWER_CTL                45
 #define WHO_AM_I                 0
+
+// Macros para la implementación de la FFT
+#define FFT_SIZE 				 1024
 
 /*	-	-	-	Definición de handlers	-	-	-	*/
 
@@ -61,6 +68,9 @@ GPIO_Handler_t handlerI2cSCL = {0};
 
 I2C_Handler_t handlerAccelerometer = {0};
 
+// Handler del RTC
+RTC_Config_t rtcConfig = {0};
+
 /*	-	-	-	Definición de variables	-	-	-	*/
 
 // Variables de la comunicación serial por comandos
@@ -69,9 +79,9 @@ uint8_t counterReception		= 0;
 bool stringComplete 			= false;
 int firstParameter				= 0;
 int secondParameter				= 0;
+int thirdParameter				= 0;
 char bufferReception[64]		= {0};
 char cmd[64]					= {0};
-char userMsg[64]				= {0};
 char bufferData[64]				= {0};
 
 // Variables para la toma de datos con el acelerómetro
@@ -91,9 +101,15 @@ uint8_t flagSampling	= 0;
 uint8_t samplingEnable	= 0;
 
 float x,y,z;
-float dataAccelX[600];
-float dataAccelY[600];
-float dataAccelZ[600];
+float32_t dataAccelX[600] = {0};
+float32_t dataAccelY[600] = {0};
+float32_t dataAccelZ[600] = {0};
+
+// Variables para la implementación de la FFT
+arm_status statusInitFFT = ARM_MATH_ARGUMENT_ERROR;
+
+// Variables para el RTC
+uint8_t calendar[6] = {0};
 
 // Variables para el SysTick
 uint8_t systemTicks = 0;
@@ -326,7 +342,7 @@ void parseCommands(char *ptrBufferReception){
 	 * integers llamados "firstParameter y secondParameter.
 	 *
 	 * De esta forma, podemos introducir información al micro desde el puerto serial*/
-	sscanf(ptrBufferReception, "%s %u %u %s", cmd, &firstParameter, &secondParameter, userMsg);
+	sscanf(ptrBufferReception, "%s %u %u %u", cmd, &firstParameter, &secondParameter, &thirdParameter);
 
 	// 1) help. Imprime una lista con todos los comandos disponibles
 	if(strcmp(cmd, "help") == 0){
@@ -341,13 +357,18 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "The MCU is calibrated by default with a trim of 13, aimed at an HSI frequency of 100MHz.\n");
 		writeMsg(&handlerCommTerminal, "It's strongly recommended to keep the trim at 13. Nevertheless, the user can adjust accordingly.\n");
 		writeMsg(&handlerCommTerminal, "3) getTrimHSI - - - - - - - - - - - - - - Returns the current value of the HSI trim\n");
-		writeMsg(&handlerCommTerminal, "4) setMCO1Channel # - - - - - - - - - - - Set # as the active channel for the MCO1 (PA8). 0->HSI	1->LSE	2->PLL. Set as 2 by default.\n");
+		writeMsg(&handlerCommTerminal, "4) setMCO1Channel # - - - - - - - - - - - Set # as the active channel for the MCO1 (PA8). 1->HSI ; 2->LSE ; 3->PLL. Set as 3 by default.\n");
 		writeMsg(&handlerCommTerminal, "5) setMCO1PreScaler # - - - - - - - - - - Set # as the division factor for the active channel of MCO1 (PA8). # = {1, 2, 3, 4, 5}. Set as 5 by default\n");
-		writeMsg(&handlerCommTerminal, "6) sampleAccel - - - - - - - - - - - - -  Sample and store 6 seconds worth acceleration values at 200Hz. Needed before using fireUpFFT\n");
-		writeMsg(&handlerCommTerminal, "7) fireUpFFT - - - - - - - - - - - - - -  Use a Fast Fourier Transform to get a frequency using data from sampleAccel.\n");
-		writeMsg(&handlerCommTerminal, "8) Descripción del octavo comando\n");
-		writeMsg(&handlerCommTerminal, "9) Descripción del noveno comando\n");
-		writeMsg(&handlerCommTerminal, "10) Descripción del decimo comando\n");
+		writeMsg(&handlerCommTerminal, "6) setDate #DD #MM #YY - - - - - - - - -  Set #DD/#MM/#YY as the current day for the RTC.\n");
+		writeMsg(&handlerCommTerminal, "7) setTime #hh #mm #ss - - - - - - - - -  Set #hh:#mm:#ss as the current time (in 24h format) for the RTC.\n");
+		writeMsg(&handlerCommTerminal, "8) getDate - - - - - - - - - - - - - - -  Returns the current date of the RTC.\n");
+		writeMsg(&handlerCommTerminal, "9) getTime - - - - - - - - - - - - - - -  Returns the current time of the RTC (in 24h format).\n");
+		writeMsg(&handlerCommTerminal, "10) getDateTime - - - - - - - - - - - - - Returns the current date and time of the RTC (in 24h format).\n");
+		writeMsg(&handlerCommTerminal, "9) sampleAccel - - - - - - - - - - - - -  Sample and store 6 seconds worth acceleration values at 200Hz. Needed before using fireUpFFT\n");
+		writeMsg(&handlerCommTerminal, "10) fireUpFFT - - - - - - - - - - - - - - Use a Fast Fourier Transform to get a frequency using data from sampleAccel.\n");
+		writeMsg(&handlerCommTerminal, "11) showAccel - - - - - - - - - - - - - - Shows a 20 value sample for the acceleration data\n");
+		writeMsg(&handlerCommTerminal, "12) EMPTY\n");
+		writeMsg(&handlerCommTerminal, "13) EMPTY\n");
 		writeMsg(&handlerCommTerminal, "\n");
 	}
 
@@ -374,6 +395,9 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, bufferData);
 			writeMsg(&handlerCommTerminal, "\n");
+
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
 	}
 
@@ -387,14 +411,16 @@ void parseCommands(char *ptrBufferReception){
 
 	// 4) setMCO1Channel #. Le permite al usuario establecer el canal activo para el MCO1 (PA8)
 	else if(strcmp(cmd,"setMCO1Channel") == 0){
-		if(firstParameter == 0){
+		if(firstParameter == 1){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1);
 			RCC->CFGR |= 0b00 << RCC_CFGR_MCO1_Pos;
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Active channel for the MCO1 (PA8) successfully set as HSI\n");
 			writeMsg(&handlerCommTerminal, "\n");
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
-		else if(firstParameter == 1){
+		else if(firstParameter == 2){
 			// Se activa el LSE
 			RCC->BDCR &= ~(RCC_BDCR_LSEON);
 			RCC->BDCR |= 0b1 << RCC_BDCR_LSEON_Pos;
@@ -404,13 +430,17 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Active channel for the MCO1 (PA8) successfully set as LSE\n");
 			writeMsg(&handlerCommTerminal, "\n");
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
-		else if(firstParameter == 2){
+		else if(firstParameter == 3){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1);
 			RCC->CFGR |= 0b11 << RCC_CFGR_MCO1_Pos;
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Active channel for the MCO1 (PA8) successfully set as PLL\n");
 			writeMsg(&handlerCommTerminal, "\n");
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
 		else{
 			writeMsg(&handlerCommTerminal, "\n");
@@ -427,6 +457,8 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 1\n");
 			writeMsg(&handlerCommTerminal, "\n");
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
 		else if(firstParameter == 2){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
@@ -434,6 +466,8 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 2\n");
 			writeMsg(&handlerCommTerminal, "\n");
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
 		else if(firstParameter == 3){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
@@ -441,6 +475,8 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 3\n");
 			writeMsg(&handlerCommTerminal, "\n");
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
 		else if(firstParameter == 4){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
@@ -448,6 +484,8 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 4\n");
 			writeMsg(&handlerCommTerminal, "\n");
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
 		else if(firstParameter == 5){
 			RCC->CFGR &= ~(RCC_CFGR_MCO1PRE);
@@ -455,6 +493,8 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 			writeMsg(&handlerCommTerminal, "Division factor for the active channel of the MCO1 (PA8) successfully set as 5\n");
 			writeMsg(&handlerCommTerminal, "\n");
+			// Se limpia el parametro
+			firstParameter = 0;
 		}
 		else{
 			writeMsg(&handlerCommTerminal, "\n");
@@ -463,8 +503,432 @@ void parseCommands(char *ptrBufferReception){
 		}
 
 	}
+	// 8) setDate #dd #mm #yy. Permite establecer la fecha del RTC
+	else if(strcmp(cmd,"setDate") == 0){
+		// Se evalua el formato para el año
+		if(thirdParameter >= 0 && thirdParameter <= 99){
+			// Formato correcto para el año. Se evalúa el formato para cada mes.
 
-	// 6) sampleAccel. Imprime 200 datos de aceleración
+			if(secondParameter == 1){
+				// Formato correcto para enero. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 31){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 31 for the month selected (January).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 2){
+				// Formato correcto para febrero. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 28){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 28 for the month selected (Feburary).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 3){
+				// Formato correcto para marzo. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 31){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 31 for the month selected (March).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 4){
+				// Formato correcto para abril. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 30){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 30 for the month selected (April).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 5){
+				// Formato correcto para mayo. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 31){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 31 for the month selected (May).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 6){
+				// Formato correcto para junio. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 30){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 30 for the month selected (June).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 7){
+				// Formato correcto para julio. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 31){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 31 for the month selected (July).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 8){
+				// Formato correcto para agosto. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 31){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 31 for the month selected (August).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 9){
+				// Formato correcto para septiembre. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 30){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 30 for the month selected (September).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 10){
+				// Formato correcto para octubre. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 31){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 31 for the month selected (October).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 11){
+				// Formato correcto para noviembre. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 30){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 30 for the month selected (November).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else if(secondParameter == 12){
+				// Formato correcto para diciembre. Se evalúa el formato de los días
+				if(firstParameter >= 1 && firstParameter <= 31){
+					// Formato válido para configuración. Se procede a configurar.
+					rtcConfig.RTC_DayValue = firstParameter;
+					rtcConfig.RTC_Month = secondParameter;
+					rtcConfig.RTC_Year = thirdParameter;
+					rtcConfig.DRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.DRMod = 0;
+
+					sprintf(bufferData,"Date successfully set as %u/%u/%u\n", firstParameter, secondParameter, thirdParameter);
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, bufferData);
+					writeMsg(&handlerCommTerminal, "\n");
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los días
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid day format. #DD ranges between 1 and 31 for the month selected (December).\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else{
+				// Formato inválido para los meses
+				writeMsg(&handlerCommTerminal, "\n");
+				writeMsg(&handlerCommTerminal, "Invalid month format. #MM ranges between 1 and 12 (January through December).\n");
+				writeMsg(&handlerCommTerminal, "\n");
+			}
+
+		}
+		else{
+			// Formato inválido para los años
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Invalid year format. #YY ranges between 00 and 99 and represents years between 2000 and 2099.\n");
+			writeMsg(&handlerCommTerminal, "\n");
+		}
+	}
+
+	// 7) setTime. Permite establecer la hora para el RTC en formato militar
+	else if(strcmp(cmd,"setTime") == 0){
+		// Verificación para el formato de las horas
+		if(firstParameter >= 0 && firstParameter <= 23 ){
+			// Formato válido para las horas
+			// Verificación del formato de minutos
+			if(secondParameter >= 0 && secondParameter <= 59){
+				//Formato válido para los minutos
+				// Verificación del formato de los segundos
+				if(thirdParameter >= 0 && thirdParameter <= 59){
+					// Formato válido para los segundos
+					// Se realiza la configuración
+					rtcConfig.RTC_Hours = firstParameter;
+					rtcConfig.RTC_Minutes = secondParameter;
+					rtcConfig.RTC_Seconds = thirdParameter;
+					rtcConfig.TRMod = 1;
+					RTC_Config(&rtcConfig);
+					rtcConfig.TRMod = 0;
+					sprintf(bufferData, "Time successfully set as %u:%u:%u (24h format)\n",firstParameter,secondParameter,thirdParameter);
+					writeMsg(&handlerCommTerminal, bufferData);
+
+					// Se reinician los parámetros
+					firstParameter = 0;
+					secondParameter = 0;
+					thirdParameter = 0;
+				}
+				else{
+					// Formato inválido para los segundos
+					writeMsg(&handlerCommTerminal, "\n");
+					writeMsg(&handlerCommTerminal, "Invalid seconds format. #ss ranges between 0 and 59.\n");
+					writeMsg(&handlerCommTerminal, "\n");
+				}
+			}
+			else{
+				// Formato inválido para los minutos
+				writeMsg(&handlerCommTerminal, "\n");
+				writeMsg(&handlerCommTerminal, "Invalid minutes format. #mm ranges between 0 and 59.\n");
+				writeMsg(&handlerCommTerminal, "\n");
+			}
+		}
+		else{
+			// Formato inválido para las horas
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Invalid hours format. #hh ranges between 0 and 24.\n");
+			writeMsg(&handlerCommTerminal, "\n");
+		}
+	}
+	// 8) getDate. Entrega la fecha actual del RTC
+	else if(strcmp(cmd,"getDate") == 0){
+			RTC_read(calendar);
+			sprintf(bufferData,"Current date set as: %u/%u/%u\n",calendar[4],calendar[5],calendar[6]);
+			writeMsg(&handlerCommTerminal,bufferData);
+	}
+
+	// 9) getTime. Entrega la hora actual del RTC
+	else if(strcmp(cmd,"getTime") == 0){
+			RTC_read(calendar);
+			sprintf(bufferData,"Current time (in 24h format) set as: %u:%u:%u\n",calendar[2],calendar[1],calendar[0]);
+			writeMsg(&handlerCommTerminal,bufferData);
+		}
+
+	// 10) getDateTime. Entrega la hora y fecha actuales del RTC
+	else if(strcmp(cmd,"getDateTime") == 0){
+		RTC_read(calendar);
+		sprintf(bufferData,"Current date and time (in 24h format) set as: %u/%u/%u  %u:%u:%u\n",calendar[4],calendar[5],calendar[6],calendar[2],calendar[1],calendar[0]);
+		writeMsg(&handlerCommTerminal,bufferData);
+	}
+	// 8) sampleAccel. Toma 600 datos de aceleración
 	else if(strcmp(cmd,"sampleAccel") == 0){
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "Sampling acceleration...\n");
@@ -496,6 +960,95 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "Command 'fireUpFFT' unlocked and ready to use.\n");
 		writeMsg(&handlerCommTerminal, "\n");
      }
+	// 9) fireUpFFT. Permite al usuario calcular la frecuencia fundamental detectada por el acelerómetro
+	else if(strcmp(cmd,"fireUpFFT") == 0){
+		if(flag_sampleAccel){
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "Making Fourier proud...\n");
+			writeMsg(&handlerCommTerminal, "\n");
+
+			// Se definen los buffer de entrada y de salida
+			float32_t outputX[1024] = {0}, outputY[1024] = {0},outputZ[1024] = {0};
+
+			// Se definen las variables para obtener los máximos de cada eje, el máximo absoluto y la frecuencia predominante
+			float32_t	maxValueX = 0, maxValueY = 0, maxValueZ = 0;
+			uint32_t 	maxIndexX = 0, maxIndexY = 0, maxIndexZ = 0, maxIndex = 0;
+			uint16_t 	dominantFreq = 420;
+
+			// Se castean los valores obtenidos para el acelerómetro
+//			for(int i; i < 600; i++){
+//				inputX[i] = dataAccelX[i];
+//				inputY[i] = dataAccelY[i];
+//				inputZ[i] = dataAccelZ[i];
+//			}
+
+			// Se inicializa la transformada
+			arm_rfft_fast_instance_f32 fftInstance;
+			statusInitFFT = arm_rfft_fast_init_f32(&fftInstance, FFT_SIZE);
+
+
+			if(statusInitFFT == ARM_MATH_SUCCESS){
+				// Se ejecuta la transformada para cada uno de los ejes
+							arm_rfft_fast_f32(&fftInstance, dataAccelX, outputX, 0);
+							arm_rfft_fast_f32(&fftInstance, dataAccelY, outputY, 0);
+							arm_rfft_fast_f32(&fftInstance, dataAccelZ, outputZ, 0);
+
+							// Se saca la magnitud para cada transformada
+							arm_cmplx_mag_f32(outputX, outputX, FFT_SIZE / 2);
+							arm_cmplx_mag_f32(outputY, outputY, FFT_SIZE / 2);
+							arm_cmplx_mag_f32(outputZ, outputZ, FFT_SIZE / 2);
+
+							// Se obtienen los máximos
+							arm_max_f32(outputX, FFT_SIZE / 2, &maxValueX, &maxIndexX);
+							arm_max_f32(outputY, FFT_SIZE / 2, &maxValueY, &maxIndexY);
+							arm_max_f32(outputZ, FFT_SIZE / 2, &maxValueZ, &maxIndexZ);
+
+							// Se saca el máximo absoluto
+
+							// Se establece X por defecto
+							maxIndex = maxIndexX;
+							if(maxValueY > maxValueX){
+								//Y le gana a X
+								maxIndex = maxIndexY;
+							}
+							else if(maxValueZ > maxValueX){
+								//Z le gana a X
+								maxIndex = maxIndexY;
+							}
+
+							// Se calcula la frecuencia dominante
+							dominantFreq = (maxIndex*200) / FFT_SIZE;
+							sprintf(bufferData, "The dominant frequency in the data is %u", dominantFreq);
+							delay_ms(1500);
+
+							writeMsg(&handlerCommTerminal, "\n");
+							writeMsg(&handlerCommTerminal, "FFT executed successfully!\n");
+							writeMsg(&handlerCommTerminal, "\n");
+							writeMsg(&handlerCommTerminal, bufferData);
+							writeMsg(&handlerCommTerminal, "\n");
+
+
+			}else{
+				writeMsg(&handlerCommTerminal, "\n");
+				writeMsg(&handlerCommTerminal, "FFT not initialized\n");
+				writeMsg(&handlerCommTerminal, "\n");
+			}
+		}
+
+		else{
+			writeMsg(&handlerCommTerminal, "\n");
+			writeMsg(&handlerCommTerminal, "No data available to perform a FFT\n");
+			writeMsg(&handlerCommTerminal, "Execute command 'sampleAccel' to unlock this command.\n");
+			writeMsg(&handlerCommTerminal, "\n");
+		}
+	}
+	// 10) showAccel
+	else if(strcmp(cmd, "showAccel") == 0){
+		for (int i = 0;i<20; i++){
+			sprintf(bufferData, "Accel = x %.5f; y %.5f; z %.5f ; #Datum %d \n", dataAccelX[i], dataAccelY[i], dataAccelZ[i], i+1);
+            writeMsg(&handlerCommTerminal, bufferData);
+		}
+	}
 	else{
 		// Se imprime el mensaje "Wrong CMD" si la escritura no corresponde a los CMD implementados
 		writeMsg(&handlerCommTerminal, "\n");
@@ -508,13 +1061,18 @@ void parseCommands(char *ptrBufferReception){
 void sampleAccel(void){
 	AccelX_low =  i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_L);
 	AccelX_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_XOUT_H);
-	x = AccelX_high << 8 | AccelX_low;
+	AccelX = AccelX_high << 8 | AccelX_low;
 	AccelY_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_YOUT_L);
 	AccelY_high = i2c_readSingleRegister(&handlerAccelerometer,ACCEL_YOUT_H);
-	y = AccelY_high << 8 | AccelY_low;
+	AccelY = AccelY_high << 8 | AccelY_low;
 	AccelZ_low = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_L);
 	AccelZ_high = i2c_readSingleRegister(&handlerAccelerometer, ACCEL_ZOUT_H);
-	z = AccelZ_high << 8 | AccelZ_low;
+	AccelZ = AccelZ_high << 8 | AccelZ_low;
+
+	// Conversión a m/s²
+	x = (AccelX/256.f)*9.78;
+	y = (AccelY/256.f)*9.78;
+	z = (AccelZ/256.f)*9.78;
 }
 
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
