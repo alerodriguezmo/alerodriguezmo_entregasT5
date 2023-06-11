@@ -56,6 +56,8 @@ USART_Handler_t handlerCommTerminal 	= {0};
 
 // Handler del led de estado (Blinky)
 GPIO_Handler_t handlerLEDBlinky = {0};
+
+// Handler del pin MCO1
 GPIO_Handler_t handlerMCO		= {0};
 
 // Handlers de los timers
@@ -155,14 +157,16 @@ int main (void){
 	// Se establece la frecuencia del micro en 100MHz
 	configPLL(FREQUENCY_100_MHz);
 
-	// Se imprime un mensaje de inicio por la terminal serial
-	writeMsg(&handlerCommTerminal, "EXAMEN FINAL - Taller V (2023-01) \n"
-			"Alejandro Rodriguez Montes \n"
-			"Escriba el comando 'help @' para ver los comandos disponibles \n");
-
 	// Encendemos el acelerómetro, muestreando a 1.6KHz
 	i2c_writeSingleRegister(&handlerAccelerometer, BW_RATE , 0xF);
 	i2c_writeSingleRegister(&handlerAccelerometer, POWER_CTL , 0b00001000);
+
+	// Se imprime un mensaje de inicio por la terminal serial
+	writeMsg(&handlerCommTerminal, "EXAMEN FINAL - Taller V (2023-01)\n");
+	writeMsg(&handlerCommTerminal, "Alejandro Rodriguez Montes \n");
+	writeMsg(&handlerCommTerminal, "Command format is 'command #1 #2 #3 @' \n");
+	writeMsg(&handlerCommTerminal, "Send command 'help @' to get a list of the available commands\n");
+
 
 	while(1){
 
@@ -418,13 +422,13 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "to keep the trim at 13. Nevertheless, the user can adjust accordingly.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "3) getTrimHSI\n");
-		writeMsg(&handlerCommTerminal, "Returns the current value of the HSI trim\n");
+		writeMsg(&handlerCommTerminal, "Returns the current value of the HSI trim.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "4) setMCO1Channel #\n");
 		writeMsg(&handlerCommTerminal, "Set # as the active channel for the MCO1 (PA8). 1->HSI ; 2->LSE ; 3->PLL. Set as 3 by default.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "5) setMCO1PreScaler #\n");
-		writeMsg(&handlerCommTerminal, "Set # as the division factor for the active channel of MCO1 (PA8). # = {1, 2, 3, 4, 5}. Set as 5 by default\n");
+		writeMsg(&handlerCommTerminal, "Set # as the division factor for the active channel of MCO1 (PA8). # = {1, 2, 3, 4, 5}. Set as 5 by default.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "6) setDate #DD #MM #YY\n");
 		writeMsg(&handlerCommTerminal, "Set #DD/#MM/#YY as the current day for the RTC.\n");
@@ -442,8 +446,8 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "Returns the current date and time of the RTC (in 24h format).\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "11) setADCFrequency #\n");
-		writeMsg(&handlerCommTerminal, "Using the frequency # (in Hz) of the signal to be analyzed, sets adequate analog-to-digital conversion speed.\n");
-		writeMsg(&handlerCommTerminal, "It can take integer values between 800 and 1500. Executing this commands unlocks 'startADC'.\n");
+		writeMsg(&handlerCommTerminal, "Configures the analog-to-digital conversion to receive signals of up to # Hz\n");
+		writeMsg(&handlerCommTerminal, "# can take integer values between 800 and 1500. Executing this commands unlocks 'startADC'.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "12) startADC\n");
 		writeMsg(&handlerCommTerminal, "Initializes the analog-to-digital conversion.\n");
@@ -453,9 +457,11 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "The MCU must be reset each time a new data set is sampled.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "14) showAccel\n");
-		writeMsg(&handlerCommTerminal, "Shows a sample of 20 for the acceleration data\n");
+		writeMsg(&handlerCommTerminal, "Shows a sample of 20 data of the current acceleration values.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "15) fireUpFFT\n");
+		writeMsg(&handlerCommTerminal, "Performs a Fast Fourier Transform on the data collected after using 'sampleAccel' and returns.\n");
+		writeMsg(&handlerCommTerminal, "the dominant frequency detected. Command unlocked after 'sampleAccel' is used.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 	}
 
@@ -1093,7 +1099,16 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "Command 'fireUpFFT' unlocked and ready to use.\n");
 		writeMsg(&handlerCommTerminal, "\n");
      }
-	// 14) fireUpFFT. Permite al usuario calcular la frecuencia fundamental detectada por el acelerómetro
+
+	// 14) showAccel
+	else if(strcmp(cmd, "showAccel") == 0){
+		for (int i = 0;i<20; i++){
+			sprintf(bufferData, "Accel = x %.5f; y %.5f; z %.5f ; #Datum %d \n", dataAccelX[i], dataAccelY[i], dataAccelZ[i], i+1);
+            writeMsg(&handlerCommTerminal, bufferData);
+		}
+	}
+
+	// 15) fireUpFFT. Permite al usuario calcular la frecuencia fundamental detectada por el acelerómetro
 	else if(strcmp(cmd,"fireUpFFT") == 0){
 		if(flag_sampleAccel){
 			writeMsg(&handlerCommTerminal, "\n");
@@ -1161,13 +1176,7 @@ void parseCommands(char *ptrBufferReception){
 			writeMsg(&handlerCommTerminal, "\n");
 		}
 	}
-	// 15) showAccel
-	else if(strcmp(cmd, "showAccel") == 0){
-		for (int i = 0;i<20; i++){
-			sprintf(bufferData, "Accel = x %.5f; y %.5f; z %.5f ; #Datum %d \n", dataAccelX[i], dataAccelY[i], dataAccelZ[i], i+1);
-            writeMsg(&handlerCommTerminal, bufferData);
-		}
-	}
+
 	else{
 		// Se imprime el mensaje "Wrong CMD" si la escritura no corresponde a los CMD implementados
 		writeMsg(&handlerCommTerminal, "\n");
