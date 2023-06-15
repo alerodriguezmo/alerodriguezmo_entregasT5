@@ -453,11 +453,11 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "Initializes the analog-to-digital conversion.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "13) sampleAccel\n");
-		writeMsg(&handlerCommTerminal, "Sample and store 512 acceleration values for the z-axis at 200Hz. Needed before using fireUpFFT\n");
-		writeMsg(&handlerCommTerminal, "The MCU must be reset each time a new data set is sampled.\n");
+		writeMsg(&handlerCommTerminal, "Sample and store 512 acceleration values at 200Hz. Needed before using fireUpFFT\n");
+		writeMsg(&handlerCommTerminal, "The MCU must be reset to sample a new data set.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "14) showAccel\n");
-		writeMsg(&handlerCommTerminal, "Shows a sample of 20 data of the current acceleration values.\n");
+		writeMsg(&handlerCommTerminal, "Shows a sample of 20 of the stored acceleration values.\n");
 		writeMsg(&handlerCommTerminal, "\n");
 		writeMsg(&handlerCommTerminal, "15) fireUpFFT\n");
 		writeMsg(&handlerCommTerminal, "Performs a Fast Fourier Transform on the data collected after using 'sampleAccel' and returns.\n");

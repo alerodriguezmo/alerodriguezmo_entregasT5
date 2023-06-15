@@ -14,6 +14,7 @@
 #define BTIMER_MODE_UP		0
 #define BTIMER_MODE_DOWN	1
 
+#define BTIMER_SPEED_1us	16
 #define BTIMER_SPEED_10us	160
 #define BTIMER_SPEED_100us	1600
 #define BTIMER_SPEED_1ms	16000
@@ -48,6 +49,9 @@ void BasicTimer2_Callback(void); /* Esta función debe ser sobre-escrita en el m
 void BasicTimer3_Callback(void);
 void BasicTimer4_Callback(void);
 void BasicTimer5_Callback(void);
+
+void StartTimer(BasicTimer_Handler_t *ptrBTimerHandler);
+void StopTimer(BasicTimer_Handler_t *ptrBTimerHandler);
 
 
 
