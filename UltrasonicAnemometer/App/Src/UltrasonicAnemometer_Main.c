@@ -277,7 +277,7 @@ void initSystem(void){
 	handlerEchoYRise.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
 
 	handlerEchoYFall.pGPIOx												= GPIOB;
-	handlerEchoYFall.GPIO_PinConfig.GPIO_PinNumber						= PIN_8;
+	handlerEchoYFall.GPIO_PinConfig.GPIO_PinNumber						= PIN_15;
 	handlerEchoYFall.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_IN;
 	handlerEchoYFall.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
 	handlerEchoYFall.GPIO_PinConfig.GPIO_PinPuPdControl					= GPIO_PUPDR_NOTHING;
@@ -292,7 +292,7 @@ void initSystem(void){
 	handlerExtiEchoYRise.edgeType 		= EXTERNAL_INTERRUPT_RISING_EDGE;
 	handlerExtiEchoYRise.pGPIOHandler	= &handlerEchoYRise;
 
-	handlerExtiEchoYRise.edgeType 		= EXTERNAL_INTERRUPT_FALLING_EDGE;
+	handlerExtiEchoYFall.edgeType 		= EXTERNAL_INTERRUPT_FALLING_EDGE;
 	handlerExtiEchoYFall.pGPIOHandler	= &handlerEchoYFall;
 
 	// Se carga la configuración
@@ -369,7 +369,7 @@ void parseCommands(char *ptrBufferReception){
 		delay_ms(9);
 		timeOfFlightX = stopwatchX / 200.0;
 
-		distanceX = (343*timeOfFlightX/1000)*100;
+		distanceX = (348.2*timeOfFlightX/1000)*100;
 
 
 		sprintf(bufferData,"X-AXIS: time of flight %.5f ms ; distance %.2f cm\n", timeOfFlightX,distanceX);
@@ -389,7 +389,7 @@ void parseCommands(char *ptrBufferReception){
 		delay_ms(9);
 		timeOfFlightY = stopwatchY / 200.0;
 
-		distanceY = (343*timeOfFlightY/1000)*100;
+		distanceY = (348.2*timeOfFlightY/1000)*100;
 
 
 		sprintf(bufferData,"Y-AXIS: time of flight %.5f ms ; distance %.2f cm\n", timeOfFlightY,distanceY);
@@ -444,7 +444,7 @@ void callback_extInt6(void){
 	StartTimer(&handlerStopwatchY);
 }
 
-void callback_extInt8(void){
+void callback_extInt15(void){
 	// Callback fall Y
 	StopTimer(&handlerStopwatchY);
 }
