@@ -40,19 +40,27 @@ GPIO_Handler_t handlerLEDBlinky = {0};
 
 // Handlers de los pines Trigger del HC-SR04
 GPIO_Handler_t handlerTrigX		= {0};
+GPIO_Handler_t handlerTrigY		= {0};
 
 // Handlers de los pines Echo del HC-SR04
 GPIO_Handler_t handlerEchoXRise		= {0};
 GPIO_Handler_t handlerEchoXFall		= {0};
 
+GPIO_Handler_t handlerEchoYRise		= {0};
+GPIO_Handler_t handlerEchoYFall		= {0};
+
 // Handlers para las interrupciones
 EXTI_Config_t handlerExtiEchoXRise 		= {0};
 EXTI_Config_t handlerExtiEchoXFall 		= {0};
 
+EXTI_Config_t handlerExtiEchoYRise 		= {0};
+EXTI_Config_t handlerExtiEchoYFall 		= {0};
+
 
 // Handlers de los timers
-BasicTimer_Handler_t handlerBlinkyTimer = {0};
-BasicTimer_Handler_t handlerStopwatch   = {0};
+BasicTimer_Handler_t handlerBlinkyTimer 	= {0};
+BasicTimer_Handler_t handlerStopwatchX   	= {0};
+BasicTimer_Handler_t handlerStopwatchY   	= {0};
 
 /*	-	-	-	Definición de variables	-	-	-	*/
 
@@ -68,12 +76,12 @@ char cmd[64]					= {0};
 char bufferData[64]				= {0};
 
 // Variables auxiliares
-uint8_t extiRiseOrFall 			= 0;
-uint64_t stopwatch 				= 0;
-float  timeOfFlight				= 0;
-float distance 					= 0;
-float timeOfFlight_Avg[10]		= {0};
-float distance_Avg[10]			= {0};
+uint64_t stopwatchX				= 0;
+uint64_t stopwatchY				= 0;
+float  timeOfFlightX			= 0;
+float  timeOfFlightY			= 0;
+float distanceX					= 0;
+float distanceY					= 0;
 
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
 void initSystem(void);
@@ -173,19 +181,29 @@ void initSystem(void){
 	BasicTimer_Config(&handlerBlinkyTimer);
 	StartTimer(&handlerBlinkyTimer);
 
-	// Configuracion del TIM3 para que cuente tiempo a incrementos de 10us (Stopwatch)
-	handlerStopwatch.ptrTIMx                               = TIM4;
-	handlerStopwatch.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
-	handlerStopwatch.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1us;
-	handlerStopwatch.TIMx_Config.TIMx_period               = 10;
-	handlerStopwatch.TIMx_Config.TIMx_interruptEnable      = 1;
+	// Configuracion del TIM3 para que cuente tiempo a incrementos de 10us (Stopwatch X)
+	handlerStopwatchX.ptrTIMx                               = TIM3;
+	handlerStopwatchX.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
+	handlerStopwatchX.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1us;
+	handlerStopwatchX.TIMx_Config.TIMx_period               = 10;
+	handlerStopwatchX.TIMx_Config.TIMx_interruptEnable      = 1;
 
 	// Se carga la configuración
-	BasicTimer_Config(&handlerStopwatch);
+	BasicTimer_Config(&handlerStopwatchX);
+
+	// Configuracion del TIM4 para que cuente tiempo a incrementos de 10us (Stopwatch Y)
+	handlerStopwatchY.ptrTIMx                               = TIM4;
+	handlerStopwatchY.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
+	handlerStopwatchY.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1us;
+	handlerStopwatchY.TIMx_Config.TIMx_period               = 10;
+	handlerStopwatchY.TIMx_Config.TIMx_interruptEnable      = 1;
+
+	// Se carga la configuración
+	BasicTimer_Config(&handlerStopwatchY);
 
 	/*	-	-	-	Pines Trigger de los HC-SR04	-	-	-	*/
 
-	/*	-	-	-	EJE X-	-	-	-	*/
+	/*	-	-	-	EJE X	-	-	-	*/
 
 	handlerTrigX.pGPIOx												= GPIOB;
 	handlerTrigX.GPIO_PinConfig.GPIO_PinNumber						= PIN_9;
@@ -199,7 +217,23 @@ void initSystem(void){
 	GPIO_Config(&handlerTrigX);
 	GPIO_WritePin(&handlerTrigX, RESET);
 
+	/*	-	-	-	EJE Y	-	-	-	*/
+
+	handlerTrigY.pGPIOx												= GPIOC;
+	handlerTrigY.GPIO_PinConfig.GPIO_PinNumber						= PIN_9;
+	handlerTrigY.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_OUT;
+	handlerTrigY.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
+	handlerTrigY.GPIO_PinConfig.GPIO_PinPuPdControl					= GPIO_PUPDR_NOTHING;
+	handlerTrigY.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
+	handlerTrigY.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+
+	// Se carga la configuración y se inicializa en 0
+	GPIO_Config(&handlerTrigY);
+	GPIO_WritePin(&handlerTrigY, RESET);
+
 	/*	-	-	-	Pines Echo de los HC-SR04	-	-	-	*/
+
+	/*	-	-	-	EJE X	-	-	-	*/
 
 	handlerEchoXRise.pGPIOx												= GPIOB;
 	handlerEchoXRise.GPIO_PinConfig.GPIO_PinNumber						= PIN_4;
@@ -231,6 +265,39 @@ void initSystem(void){
 	// Se carga la configuración
 	extInt_Config(&handlerExtiEchoXRise);
 	extInt_Config(&handlerExtiEchoXFall);
+
+	/*	-	-	-	EJE Y	-	-	-	*/
+
+	handlerEchoYRise.pGPIOx												= GPIOC;
+	handlerEchoYRise.GPIO_PinConfig.GPIO_PinNumber						= PIN_6;
+	handlerEchoYRise.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_IN;
+	handlerEchoYRise.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
+	handlerEchoYRise.GPIO_PinConfig.GPIO_PinPuPdControl					= GPIO_PUPDR_NOTHING;
+	handlerEchoYRise.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
+	handlerEchoYRise.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+
+	handlerEchoYFall.pGPIOx												= GPIOB;
+	handlerEchoYFall.GPIO_PinConfig.GPIO_PinNumber						= PIN_8;
+	handlerEchoYFall.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_IN;
+	handlerEchoYFall.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
+	handlerEchoYFall.GPIO_PinConfig.GPIO_PinPuPdControl					= GPIO_PUPDR_NOTHING;
+	handlerEchoYFall.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
+	handlerEchoYFall.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+
+	// Se cargan las configuraciones
+	GPIO_Config(&handlerEchoYRise);
+	GPIO_Config(&handlerEchoYFall);
+
+	// Se configura la exti de los Echo
+	handlerExtiEchoYRise.edgeType 		= EXTERNAL_INTERRUPT_RISING_EDGE;
+	handlerExtiEchoYRise.pGPIOHandler	= &handlerEchoYRise;
+
+	handlerExtiEchoYRise.edgeType 		= EXTERNAL_INTERRUPT_FALLING_EDGE;
+	handlerExtiEchoYFall.pGPIOHandler	= &handlerEchoYFall;
+
+	// Se carga la configuración
+	extInt_Config(&handlerExtiEchoYRise);
+	extInt_Config(&handlerExtiEchoYFall);
 
 	/*	-	-	-	Comunicación serial	-	-	-	*/
 	handlerPinTX.pGPIOx                               = GPIOA;
@@ -299,17 +366,38 @@ void parseCommands(char *ptrBufferReception){
 		delay_ms(1);
 		GPIO_WritePin(&handlerTrigX, RESET);
 
-		delay_ms(10);
-		timeOfFlight = stopwatch / 200000.0;
+		delay_ms(9);
+		timeOfFlightX = stopwatchX / 200.0;
 
-		distance = (343*timeOfFlight)*100;
+		distanceX = (343*timeOfFlightX/1000)*100;
 
 
-		sprintf(bufferData,"The time of flight was %.5f and the distance is %.2f cm\n", timeOfFlight,distance);
+		sprintf(bufferData,"X-AXIS: time of flight %.5f ms ; distance %.2f cm\n", timeOfFlightX,distanceX);
 		writeMsg(&handlerCommTerminal, bufferData);
 
-		stopwatch = 0;
-		timeOfFlight = 0;
+		stopwatchX = 0;
+		timeOfFlightX = 0;
+		distanceX = 0;
+
+		delay_ms(50);
+
+		// Se manda un pulso ultrasónico...
+		GPIO_WritePin(&handlerTrigY, SET);
+		delay_ms(1);
+		GPIO_WritePin(&handlerTrigY, RESET);
+
+		delay_ms(9);
+		timeOfFlightY = stopwatchY / 200.0;
+
+		distanceY = (343*timeOfFlightY/1000)*100;
+
+
+		sprintf(bufferData,"Y-AXIS: time of flight %.5f ms ; distance %.2f cm\n", timeOfFlightY,distanceY);
+		writeMsg(&handlerCommTerminal, bufferData);
+
+		stopwatchY = 0;
+		timeOfFlightY = 0;
+		distanceY = 0;
 	}
 	else{
 		// Se imprime el mensaje "Wrong CMD" si la escritura no corresponde a los CMD implementados
@@ -331,17 +419,34 @@ void BasicTimer2_Callback(void){
 	GPIOxTooglePin(&handlerLEDBlinky);
 }
 
+void BasicTimer3_Callback(void){
+	// Timer encargado de cronometrar
+	stopwatchX++;
+}
+
 void BasicTimer4_Callback(void){
 	// Timer encargado de cronometrar
-	stopwatch++;
+	stopwatchY++;
 }
 
 void callback_extInt4(void){
-	StartTimer(&handlerStopwatch);
+	// Callback rise X
+	StartTimer(&handlerStopwatchX);
 }
 
 void callback_extInt5(void){
-	StopTimer(&handlerStopwatch);
+	// Callback fall X
+	StopTimer(&handlerStopwatchX);
+}
+
+void callback_extInt6(void){
+	// Callback rise Y
+	StartTimer(&handlerStopwatchY);
+}
+
+void callback_extInt8(void){
+	// Callback fall Y
+	StopTimer(&handlerStopwatchY);
 }
 
 /*	=	=	=	FIN DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
