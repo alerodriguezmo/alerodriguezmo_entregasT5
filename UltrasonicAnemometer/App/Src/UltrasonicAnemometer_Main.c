@@ -70,7 +70,11 @@ char bufferData[64]				= {0};
 // Variables auxiliares
 uint64_t stopwatch				= 0;
 float  timeOfFlightAB			= 0;
-float distanceX					= 0;
+float  timeOfFlightBA			= 0;
+float distanceX1				= 0;
+float distanceX2				= 0;
+float Vx						= {0};
+float Vx_mean					= {0};
 
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
 void initSystem(void);
@@ -174,7 +178,7 @@ void initSystem(void){
 	handlerStopwatch.ptrTIMx                               = TIM4;
 	handlerStopwatch.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
 	handlerStopwatch.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1us;
-	handlerStopwatch.TIMx_Config.TIMx_period               = 10;
+	handlerStopwatch.TIMx_Config.TIMx_period               = 5;
 	handlerStopwatch.TIMx_Config.TIMx_interruptEnable      = 1;
 
 	// Se carga la configuración
@@ -304,43 +308,48 @@ void parseCommands(char *ptrBufferReception){
 	// 2) measureTOF. Permite medir el tiempo de vuelo del sonido hasta un obstáculo
 	else if(strcmp(cmd,"measureTOF") == 0){
 
-		// Se manda un pulso ultrasónico...
-		GPIO_WritePin(&handlerTrigX1, SET);
-		delay_ms(1);
-		GPIO_WritePin(&handlerTrigX1, RESET);
+		for(int i = 0; i < 3; i++){
+			// Se manda un pulso ultrasónico...
+			GPIO_WritePin(&handlerTrigX1, SET);
+			delay_ms(1);
+			GPIO_WritePin(&handlerTrigX1, RESET);
 
-		delay_ms(20);
-		timeOfFlightAB = stopwatch / 100.0;
+			delay_ms(5);
+			timeOfFlightAB = stopwatch / 200000.0;
 
-		distanceX = (348.2*timeOfFlightAB/1000)*100;
+			distanceX1 = 348.2*timeOfFlightAB;
+
+			stopwatch = 0;
+
+			delay_ms(100);
+
+			// Se manda un pulso ultrasónico...
+			GPIO_WritePin(&handlerTrigX2, SET);
+			delay_ms(1);
+			GPIO_WritePin(&handlerTrigX2, RESET);
+
+			delay_ms(5);
+			timeOfFlightBA = stopwatch / 200000.0;
+
+			distanceX2 = 348.2*timeOfFlightBA;
 
 
-		sprintf(bufferData,"X-AXIS: time of flight one %.5f ms ; distance %.2f cm\n", timeOfFlightAB,distanceX);
+			stopwatch = 0;
+
+
+			Vx =((distanceX1 + distanceX2)/4.0)*((1 / timeOfFlightAB)-(1 / timeOfFlightBA));
+
+			Vx_mean = Vx / 3;
+
+			timeOfFlightAB = 0;
+			timeOfFlightBA = 0;
+
+			delay_ms(100);
+
+		}
+
+		sprintf(bufferData,"Vx = %.3f m/s\n", Vx_mean);
 		writeMsg(&handlerCommTerminal, bufferData);
-
-		stopwatch = 0;
-		timeOfFlightAB = 0;
-		distanceX = 0;
-
-		delay_ms(50);
-
-		// Se manda un pulso ultrasónico...
-		GPIO_WritePin(&handlerTrigX2, SET);
-		delay_ms(1);
-		GPIO_WritePin(&handlerTrigX2, RESET);
-
-		delay_ms(20);
-		timeOfFlightAB = stopwatch / 100.0;
-
-		distanceX = (348.2*timeOfFlightAB/1000)*100;
-
-
-		sprintf(bufferData,"X-AXIS: time of flight two %.5f ms ; distance %.2f cm\n", timeOfFlightAB,distanceX);
-		writeMsg(&handlerCommTerminal, bufferData);
-
-		stopwatch = 0;
-		timeOfFlightAB = 0;
-		distanceX = 0;
 
 	}
 	else{
