@@ -65,7 +65,9 @@ void i2c_sendACK(I2C_Handler_t *ptrHandlerI2C);
 void i2c_sendNoACK(I2C_Handler_t *ptrHandlerI2C);
 
 uint8_t i2c_readSingleRegister(I2C_Handler_t *ptrHandlerI2C, uint8_t regToRead);
+uint8_t i2c_readSingleRegister_16bits(I2C_Handler_t *ptrHandlerI2C, uint8_t regToRead);
 uint8_t i2c_readMultipleRegister(I2C_Handler_t *ptrHandlerI2C, uint8_t regToRead);
 void i2c_writeSingleRegister(I2C_Handler_t *ptrHandlerI2C, uint8_t regToRead, uint8_t newValue);
+void i2c_writeSingleRegister_16bits(I2C_Handler_t *ptrHandlerI2C, uint8_t regToRead, uint16_t newValue);
 
 #endif /* I2CDRIVER_H_ */

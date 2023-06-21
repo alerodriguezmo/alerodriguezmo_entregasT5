@@ -1,8 +1,8 @@
 /**
  * **************************************************************************************************
  * @file     : Alejandro Rodríguez Montes - alerodriguezmo@unal.edu.co
- * @author   : UltrasonicAnemometer_Main.c
- * @brief    : PROYECTO FINAL - TALLER V (2023-01)
+ * @author   : AccelTest_Main.c
+ * @brief    : TAREA ESPECIAL - TALLER V (2023-01)
  * **************************************************************************************************
  */
 
@@ -18,42 +18,59 @@
 
 #include "GPIOxDriver.h"
 #include "BasicTimer.h"
+#include "ExtiDriver.h"
 #include "USARTxDriver.h"
 #include "SysTickDriver.h"
 #include "I2CDriver.h"
-#include "ExtiDriver.h"
-
-#include "arm_math.h"
+#include "PwmDriver.h"
+#include "PLLDriver.h"
+#include "DriverLCD.h"
 
 /*	-	-	-	Definición de las macros a utilizar	-	-	-	*/
+
+#define HDC_ADDRESS          	 0x40
+
+#define HDC_TEMPERATURE          0x00
+#define HDC_HUMIDITY	         0x01
+
+#define HDC_CONFIG	             0x02
+#define HDC_DEVID	             0xFF
+
+
+#define LCD_ADDRESS				 0x24
 
 /*	-	-	-	Definición de handlers	-	-	-	*/
 
 // Handlers de la comunicacion serial
 GPIO_Handler_t handlerPinTX 			= {0};
 GPIO_Handler_t handlerPinRX 			= {0};
-
 USART_Handler_t handlerCommTerminal 	= {0};
 
-// Handlers del led de estado (Blinky)
+// Handler del led de estado (Blinky)
 GPIO_Handler_t handlerLEDBlinky = {0};
 
-// Handlers de los pines Trigger del HC-SR04
-GPIO_Handler_t handlerTrigX		= {0};
-
-// Handlers de los pines Echo del HC-SR04
-GPIO_Handler_t handlerEchoXRise		= {0};
-GPIO_Handler_t handlerEchoXFall		= {0};
-
-EXTI_Config_t handlerExtiEchoXRise		= {0};
-EXTI_Config_t handlerExtiEchoXFall		= {0};
-
-
 // Handlers de los timers
-BasicTimer_Handler_t handlerBlinkyTimer 	= {0};
-BasicTimer_Handler_t handlerStopwatch   	= {0};
+BasicTimer_Handler_t handlerBlinkyTimer = {0};
+BasicTimer_Handler_t handlerSampling	= {0};
+
+// Handlers del protocolo I2C
+GPIO_Handler_t handlerI2cSDA = {0};
+GPIO_Handler_t handlerI2cSCL = {0};
+I2C_Handler_t handlerHDC = {0};
+I2C_Handler_t handlerLCD = {0};
 
 /*	-	-	-	Definición de variables	-	-	-	*/
+uint16_t temperature_read		= 0;
+float temperature				= 0;
+uint16_t humidity_read		 	= 0;
+float humidity	 			= 0;
+char bufferTemp[64] = {0};
+char bufferHum[64] = {0};
+
+uint8_t counterLCD = 0;
+uint8_t counterSampling = 0;
+
+uint8_t i2cBuffer 		= {0};
 
 // Variables de la comunicación serial por comandos
 uint8_t rxData 					= 0;
@@ -66,32 +83,53 @@ char bufferReception[64]		= {0};
 char cmd[64]					= {0};
 char bufferData[64]				= {0};
 
-// Variables auxiliares
-uint64_t stopwatch				= 0;
-float  timeOfFlightAB			= 0;
-float distanceX					= 0;
-
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
-void initSystem(void);
 void tuneMCU(void);
+void initSystem(void);
 void parseCommands(char *ptrBufferReception);
 /*	=	=	=	INICIO DEL MAIN	=	=	=	*/
 int main (void){
-	// Se afina el micro y se establecen los parámetros de operación correctos
+
+	// Se afina el MCU
 	tuneMCU();
 
-	// Se inicializan todos los sistemas
+	// Se inicializan todos los sistemas, menos la pantalla LCD
+
 	initSystem();
 
+	// Se inicializa la pantala LCD
+	clearScreenLCD(&handlerLCD);
+
+	init_LCD(&handlerLCD);
+	delay_10(); // DELAYS CON EL SYSTICK IMPLEMENTADOS EN EL DRIVER DE LA LCD
+	clearLCD(&handlerLCD);
+	delay_10();
+
+	// Esctirura de los caracteres permanentes
+
+	// Para el eje X
+	moveCursor_inLCD(&handlerLCD, 0, 1);
+	sendSTR_toLCD(&handlerLCD, "Temp = ");
+	moveCursor_inLCD(&handlerLCD, 0, 14);
+	sendSTR_toLCD(&handlerLCD, "C");
+
+	// Para el eje Y
+	moveCursor_inLCD(&handlerLCD, 1, 1);
+	sendSTR_toLCD(&handlerLCD, "Humidity = ");
+	moveCursor_inLCD(&handlerLCD, 1, 17);
+	sendSTR_toLCD(&handlerLCD, "%");
+
+	delay_ms(20);
 
 	// Se imprime un mensaje de inicio por la terminal serial
-	writeMsg(&handlerCommTerminal, "EXAMEN FINAL - Taller V (2023-01)\n");
-	writeMsg(&handlerCommTerminal, "Alejandro Rodriguez Montes \n");
-	writeMsg(&handlerCommTerminal, "Command format is 'command #1 #2 #3 @' \n");
-	writeMsg(&handlerCommTerminal, "Send command 'help @' to get a list of the available commands\n");
+	writeMsg(&handlerCommTerminal, "TAREA ESPECIAL - Taller V (2023-01) \n"
+			"Alejandro Rodriguez Montes \n"
+			"Presione la tecla 'h' para ver los comandos disponibles \n");
+
 
 
 	while(1){
+
 
 		/*	-	-	-	Comunicación por comandos	-	-	-	*/
 		if (rxData != '\0'){
@@ -118,6 +156,30 @@ int main (void){
 			parseCommands(bufferReception);
 			stringComplete = false;
 		}
+
+		// Ciclo que muestrea temperatura y humedad
+		if(counterSampling > 10){
+			temperature_read = i2c_readSingleRegister_16bits(&handlerHDC, HDC_TEMPERATURE);
+			humidity_read	 = i2c_readSingleRegister_16bits(&handlerHDC, HDC_HUMIDITY);
+
+			temperature = ((temperature_read / 65536)*165) - 40;
+			humidity	= (humidity_read / 65536)*100;
+
+			counterSampling = 0;
+		}
+		// Ciclo que permite actualizar las lecturas en pantalla
+		if(counterLCD > 4){
+			sprintf(bufferTemp,"%.2f",temperature);
+			sprintf(bufferHum,"%.2f", humidity);
+
+			moveCursor_inLCD(&handlerLCD, 0, 15);
+			sendSTR_toLCD(&handlerLCD, bufferTemp);
+			moveCursor_inLCD(&handlerLCD, 1, 12);
+			sendSTR_toLCD(&handlerLCD, bufferHum);
+
+			counterLCD = 0;
+		}
+
 	}
 	return(0);
 }
@@ -138,6 +200,7 @@ void tuneMCU(void){
 	// Se configura el systick a 16MHz
 	config_SysTick_ms(0);
 }
+
 
 /*	-	-	-	Función que inicializa los elementos del sistema	-	-	-	*/
 void initSystem(void){
@@ -161,75 +224,66 @@ void initSystem(void){
 	// Configuracion del TIM2 para que haga un blinky cada 250ms
 	handlerBlinkyTimer.ptrTIMx                               = TIM2;
 	handlerBlinkyTimer.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
-	handlerBlinkyTimer.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1ms;
-	handlerBlinkyTimer.TIMx_Config.TIMx_period               = 250;
+	handlerBlinkyTimer.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100us;
+	handlerBlinkyTimer.TIMx_Config.TIMx_period               = 2500;
 	handlerBlinkyTimer.TIMx_Config.TIMx_interruptEnable      = 1;
 
 	// Se carga la configuración y se inicializa el timer
 	BasicTimer_Config(&handlerBlinkyTimer);
 	StartTimer(&handlerBlinkyTimer);
 
-	// Configuracion del TIM3 para que cuente tiempo a incrementos de 10us (Stopwatch X)
-	handlerStopwatch.ptrTIMx                               = TIM4;
-	handlerStopwatch.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
-	handlerStopwatch.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1us;
-	handlerStopwatch.TIMx_Config.TIMx_period               = 10;
-	handlerStopwatch.TIMx_Config.TIMx_interruptEnable      = 1;
+	// Configuracion del TIM4 para establecer la frecuencia de muestreo en 10Hz
+	handlerSampling.ptrTIMx                               = TIM4;
+	handlerSampling.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
+	handlerSampling.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1ms;
+	handlerSampling.TIMx_Config.TIMx_period               = 100;
+	handlerSampling.TIMx_Config.TIMx_interruptEnable      = 1;
 
-	// Se carga la configuración
-	BasicTimer_Config(&handlerStopwatch);
+	// Se carga la configuración y se inicializa el timer
+	BasicTimer_Config(&handlerSampling);
+	StartTimer(&handlerSampling);
 
+	/*	-	-	-	Protocolo I2C	-	-	-	*/
 
-	/*	-	-	-	Pines Trigger de los HC-SR04	-	-	-	*/
+	// Pin Clock (SCL)
+	handlerI2cSCL.pGPIOx                                      = GPIOB;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinNumber               = PIN_8;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinMode                 = GPIO_MODE_ALTFN;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinOPType               = GPIO_OTYPE_OPENDRAIN;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinSpeed                = GPIO_OSPEED_FAST;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinPuPdControl          = GPIO_PUPDR_PULLUP;
+	handlerI2cSCL.GPIO_PinConfig.GPIO_PinAltFunMode           = AF4;
+	GPIO_Config(&handlerI2cSCL);
 
-	/*	-	-	-	EJE X	-	-	-	*/
+	// Pin Data (SDA)
+	handlerI2cSDA.pGPIOx                                      = GPIOB;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinNumber               = PIN_9;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinMode                 = GPIO_MODE_ALTFN;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinOPType               = GPIO_OTYPE_OPENDRAIN;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinSpeed                = GPIO_OSPEED_FAST;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinPuPdControl          = GPIO_PUPDR_PULLUP;
+	handlerI2cSDA.GPIO_PinConfig.GPIO_PinAltFunMode           = AF4;
+	GPIO_Config(&handlerI2cSDA);
 
-	handlerTrigX.pGPIOx												= GPIOB;
-	handlerTrigX.GPIO_PinConfig.GPIO_PinNumber						= PIN_9;
-	handlerTrigX.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_OUT;
-	handlerTrigX.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
-	handlerTrigX.GPIO_PinConfig.GPIO_PinPuPdControl					= GPIO_PUPDR_NOTHING;
-	handlerTrigX.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
-	handlerTrigX.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+	// Configuración del HDC
+	handlerHDC.ptrI2Cx                            = I2C1;
+	handlerHDC.modeI2C                            = I2C_MODE_FM;
+	handlerHDC.slaveAddress                       = HDC_ADDRESS;
+	handlerHDC.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
+	handlerHDC.maxI2C_FM						  = I2C_MAX_RISE_TIME_FM_16MHz;
+	handlerHDC.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_16MHz;
 
-	// Se carga la configuración y se inicializa en 0
-	GPIO_Config(&handlerTrigX);
-	GPIO_WritePin(&handlerTrigX, RESET);
+	i2c_config(&handlerHDC);
 
-	/*	-	-	-	Pines Echo de los HC-SR04	-	-	-	*/
+	// Configuración del display LCD
+	handlerLCD.ptrI2Cx                            = I2C1;
+	handlerLCD.modeI2C                            = I2C_MODE_FM;
+	handlerLCD.slaveAddress                       = LCD_ADDRESS	;
+	handlerLCD.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
+	handlerLCD.maxI2C_FM						  = I2C_MAX_RISE_TIME_FM_16MHz;
+	handlerLCD.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_16MHz;
 
-	/*	-	-	-	EJE X	-	-	-	*/
-
-	handlerEchoXRise.pGPIOx												= GPIOC;
-	handlerEchoXRise.GPIO_PinConfig.GPIO_PinNumber						= PIN_8;
-	handlerEchoXRise.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_IN;
-	handlerEchoXRise.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
-	handlerEchoXRise.GPIO_PinConfig.GPIO_PinPuPdControl					= GPIO_PUPDR_NOTHING;
-	handlerEchoXRise.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
-	handlerEchoXRise.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
-
-	handlerEchoXFall.pGPIOx												= GPIOC;
-	handlerEchoXFall.GPIO_PinConfig.GPIO_PinNumber						= PIN_9;
-	handlerEchoXFall.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_IN;
-	handlerEchoXFall.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
-	handlerEchoXFall.GPIO_PinConfig.GPIO_PinPuPdControl					= GPIO_PUPDR_NOTHING;
-	handlerEchoXFall.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
-	handlerEchoXFall.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
-
-	handlerExtiEchoXRise.edgeType			= EXTERNAL_INTERRUPT_RISING_EDGE;
-	handlerExtiEchoXRise.pGPIOHandler		= &handlerEchoXRise;
-
-	handlerExtiEchoXFall.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
-	handlerExtiEchoXFall.pGPIOHandler		= &handlerEchoXFall;
-
-	// Se cargan las configuraciones
-	GPIO_Config(&handlerEchoXRise);
-	GPIO_Config(&handlerEchoXFall);
-	GPIO_WritePin(&handlerEchoXRise, RESET);
-	GPIO_WritePin(&handlerEchoXFall, RESET);
-
-	extInt_Config(&handlerExtiEchoXRise);
-	extInt_Config(&handlerExtiEchoXFall);
+	i2c_config(&handlerLCD);
 
 	/*	-	-	-	Comunicación serial	-	-	-	*/
 	handlerPinTX.pGPIOx                               = GPIOA;
@@ -262,12 +316,6 @@ void initSystem(void){
 	USART_Config(&handlerCommTerminal);
 
 }
-
-	/*	-	-	-	Protocolo I2C	-	-	-	*/
-
-	/*	=	=	=	INICIO DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
-
-	/*	-	-	-	Función dedicada a los comandos	-	-	-	*/
 void parseCommands(char *ptrBufferReception){
 
 	/* Esta función lee la cadena de caracteres a la que apunta el puntero
@@ -289,29 +337,6 @@ void parseCommands(char *ptrBufferReception){
 		writeMsg(&handlerCommTerminal, "Measures time of flight of sound to a given obstacle\n");
 		writeMsg(&handlerCommTerminal, "\n");
 	}
-
-	// 2) measureTOF. Permite medir el tiempo de vuelo del sonido hasta un obstáculo
-	else if(strcmp(cmd,"measureTOF") == 0){
-
-		// Se manda un pulso ultrasónico...
-		GPIO_WritePin(&handlerTrigX, SET);
-		delay_ms(1);
-		GPIO_WritePin(&handlerTrigX, RESET);
-
-		delay_ms(20);
-		timeOfFlightAB = stopwatch / 100.0;
-
-		distanceX = (348.2*timeOfFlightAB/1000)*100;
-
-
-		sprintf(bufferData,"X-AXIS: time of flight %.5f ms ; distance %.2f cm\n", timeOfFlightAB,distanceX);
-		writeMsg(&handlerCommTerminal, bufferData);
-
-		stopwatch = 0;
-		timeOfFlightAB = 0;
-		distanceX = 0;
-
-	}
 	else{
 		// Se imprime el mensaje "Wrong CMD" si la escritura no corresponde a los CMD implementados
 		writeMsg(&handlerCommTerminal, "\n");
@@ -320,29 +345,22 @@ void parseCommands(char *ptrBufferReception){
 	}
 }
 
+/*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
+
 /*	=	=	=	INICIO DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
-/* Callbacks de la transmisión serial */
-void usart2Rx_Callback(void){
+
+/* Callbacks de las interrupciones */
+void usart6Rx_Callback(void){
 	rxData = getRxData();
 }
 
 /* Callbacks de los Timers */
 void BasicTimer2_Callback(void){
-	// Timer encargado del blinky
 	GPIOxTooglePin(&handlerLEDBlinky);
+	counterLCD++;
 }
 
 void BasicTimer4_Callback(void){
-	// Timer encargado de cronometrar
-	stopwatch++;
+	counterSampling++;
 }
-
-void callback_extInt8(void){
-	StartTimer(&handlerStopwatch);
-}
-
-void callback_extInt9(void){
-	StopTimer(&handlerStopwatch);
-}
-
 /*	=	=	=	FIN DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
