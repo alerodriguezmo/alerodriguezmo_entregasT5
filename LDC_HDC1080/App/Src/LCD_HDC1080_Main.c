@@ -28,7 +28,7 @@
 
 /*	-	-	-	Definición de las macros a utilizar	-	-	-	*/
 
-#define HDC_ADDRESS          	 0x40
+#define TEMPHUM_ADDRESS          0x38
 
 #define HDC_TEMPERATURE          0x00
 #define HDC_HUMIDITY	         0x01
@@ -56,16 +56,26 @@ BasicTimer_Handler_t handlerSampling	= {0};
 // Handlers del protocolo I2C
 GPIO_Handler_t handlerI2cSDA = {0};
 GPIO_Handler_t handlerI2cSCL = {0};
-I2C_Handler_t handlerHDC = {0};
+GPIO_Handler_t handlerI2cLcdSCL = {0};
+GPIO_Handler_t handlerI2cLcdSDA = {0};
+I2C_Handler_t handlerTempHum = {0};
 I2C_Handler_t handlerLCD = {0};
 
 /*	-	-	-	Definición de variables	-	-	-	*/
-uint16_t temperature_read		= 0;
-float temperature				= 0;
-uint16_t humidity_read		 	= 0;
-float humidity	 			= 0;
-char bufferTemp[64] = {0};
-char bufferHum[64] = {0};
+char state 				= 0;
+char hum1 				= 0;
+char hum2 				= 0;
+char humAndTemp 		= 0;
+char temp1 				= 0;
+char temp2 				= 0;
+char crc 				= 0;
+
+char bufferTemp[64];
+char bufferHum[64];
+float temperature_read = 0;
+float humidity_read 	= 0;
+float temperature 	= 0;
+float humidity	 	= 0;
 
 uint8_t counterLCD = 0;
 uint8_t counterSampling = 0;
@@ -87,6 +97,7 @@ char bufferData[64]				= {0};
 void tuneMCU(void);
 void initSystem(void);
 void parseCommands(char *ptrBufferReception);
+void measureTemp_Hum(void);
 /*	=	=	=	INICIO DEL MAIN	=	=	=	*/
 int main (void){
 
@@ -158,21 +169,15 @@ int main (void){
 		}
 
 		// Ciclo que muestrea temperatura y humedad
-		if(counterSampling > 10){
-			temperature_read = i2c_readSingleRegister_16bits(&handlerHDC, HDC_TEMPERATURE);
-			humidity_read	 = i2c_readSingleRegister_16bits(&handlerHDC, HDC_HUMIDITY);
-
-			temperature = ((temperature_read / 65536)*165) - 40;
-			humidity	= (humidity_read / 65536)*100;
-
-			counterSampling = 0;
+		if(counterSampling > 2){
+			measureTemp_Hum();
 		}
 		// Ciclo que permite actualizar las lecturas en pantalla
 		if(counterLCD > 4){
 			sprintf(bufferTemp,"%.2f",temperature);
 			sprintf(bufferHum,"%.2f", humidity);
 
-			moveCursor_inLCD(&handlerLCD, 0, 15);
+			moveCursor_inLCD(&handlerLCD, 0, 8);
 			sendSTR_toLCD(&handlerLCD, bufferTemp);
 			moveCursor_inLCD(&handlerLCD, 1, 12);
 			sendSTR_toLCD(&handlerLCD, bufferHum);
@@ -232,17 +237,6 @@ void initSystem(void){
 	BasicTimer_Config(&handlerBlinkyTimer);
 	StartTimer(&handlerBlinkyTimer);
 
-	// Configuracion del TIM4 para establecer la frecuencia de muestreo en 10Hz
-	handlerSampling.ptrTIMx                               = TIM4;
-	handlerSampling.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
-	handlerSampling.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1ms;
-	handlerSampling.TIMx_Config.TIMx_period               = 100;
-	handlerSampling.TIMx_Config.TIMx_interruptEnable      = 1;
-
-	// Se carga la configuración y se inicializa el timer
-	BasicTimer_Config(&handlerSampling);
-	StartTimer(&handlerSampling);
-
 	/*	-	-	-	Protocolo I2C	-	-	-	*/
 
 	// Pin Clock (SCL)
@@ -265,18 +259,37 @@ void initSystem(void){
 	handlerI2cSDA.GPIO_PinConfig.GPIO_PinAltFunMode           = AF4;
 	GPIO_Config(&handlerI2cSDA);
 
-	// Configuración del HDC
-	handlerHDC.ptrI2Cx                            = I2C1;
-	handlerHDC.modeI2C                            = I2C_MODE_FM;
-	handlerHDC.slaveAddress                       = HDC_ADDRESS;
-	handlerHDC.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
-	handlerHDC.maxI2C_FM						  = I2C_MAX_RISE_TIME_FM_16MHz;
-	handlerHDC.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_16MHz;
+	// Pines de la pantalla LCD
+	handlerI2cLcdSCL.pGPIOx                                      = GPIOA;
+	handlerI2cLcdSCL.GPIO_PinConfig.GPIO_PinNumber               = PIN_8;
+	handlerI2cLcdSCL.GPIO_PinConfig.GPIO_PinMode                 = GPIO_MODE_ALTFN;
+	handlerI2cLcdSCL.GPIO_PinConfig.GPIO_PinOPType               = GPIO_OTYPE_OPENDRAIN;
+	handlerI2cLcdSCL.GPIO_PinConfig.GPIO_PinSpeed                = GPIO_OSPEED_FAST;
+	handlerI2cLcdSCL.GPIO_PinConfig.GPIO_PinPuPdControl          = GPIO_PUPDR_PULLUP;
+	handlerI2cLcdSCL.GPIO_PinConfig.GPIO_PinAltFunMode           = AF4;
+	GPIO_Config(&handlerI2cLcdSCL);
 
-	i2c_config(&handlerHDC);
+	handlerI2cLcdSDA.pGPIOx                                      = GPIOC;
+	handlerI2cLcdSDA.GPIO_PinConfig.GPIO_PinNumber               = PIN_9;
+	handlerI2cLcdSDA.GPIO_PinConfig.GPIO_PinMode                 = GPIO_MODE_ALTFN;
+	handlerI2cLcdSDA.GPIO_PinConfig.GPIO_PinOPType               = GPIO_OTYPE_OPENDRAIN;
+	handlerI2cLcdSDA.GPIO_PinConfig.GPIO_PinSpeed                = GPIO_OSPEED_FAST;
+	handlerI2cLcdSDA.GPIO_PinConfig.GPIO_PinPuPdControl          = GPIO_PUPDR_PULLUP;
+	handlerI2cLcdSDA.GPIO_PinConfig.GPIO_PinAltFunMode           = AF4;
+	GPIO_Config(&handlerI2cLcdSDA);
 
-	// Configuración del display LCD
-	handlerLCD.ptrI2Cx                            = I2C1;
+	// Configuración del AHT25
+	handlerTempHum.ptrI2Cx                            = I2C3;
+	handlerTempHum.modeI2C                            = I2C_MODE_SM;
+	handlerTempHum.slaveAddress                       = TEMPHUM_ADDRESS;
+	handlerTempHum.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
+	handlerTempHum.maxI2C_FM						  = I2C_MAX_RISE_TIME_SM_16MHZ;
+	handlerTempHum.modeI2C_FM						  = I2C_MODE_SM_SPEED_100KHz_16MHz;
+
+	i2c_config(&handlerTempHum);
+
+	// Configuración del sensor de temperatura
+	handlerLCD.ptrI2Cx                            = I2C3;
 	handlerLCD.modeI2C                            = I2C_MODE_FM;
 	handlerLCD.slaveAddress                       = LCD_ADDRESS	;
 	handlerLCD.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
@@ -345,6 +358,78 @@ void parseCommands(char *ptrBufferReception){
 	}
 }
 
+void measureTemp_Hum(void){
+	// Delay de inicialización
+	delay_ms(100);
+
+	// TRIGGER MEASUREMENT
+	// Se manda el start
+	i2c_startTransaction(&handlerTempHum);
+
+
+	// Se manda el slave address con la instrucción de escribir
+	i2c_sendSlaveAddressRW(&handlerTempHum, TEMPHUM_ADDRESS, I2C_WRITE_DATA);
+
+	// Se inicializa el sensor
+	i2c_sendDataByte(&handlerTempHum, 0b11100001);
+
+	// Se mandan los bytes que especifica el fabricante
+	i2c_sendDataByte(&handlerTempHum, 0xAC);		// Trigger measurement
+	i2c_sendDataByte(&handlerTempHum, 0b00110011);	// DATA0
+	i2c_sendDataByte(&handlerTempHum, 0b00000000);	// DATA1
+
+	// Se manda el stop
+	i2c_stopTransaction(&handlerTempHum);
+
+	// Delay de 100ms para que se realice la lectura
+	delay_ms(100);
+
+	// READ MEASUREMENT
+	// Se manda el start
+	i2c_startTransaction(&handlerTempHum);
+
+	// Se manda el slave address con la instrucción de leer
+	i2c_sendSlaveAddressRW(&handlerTempHum, TEMPHUM_ADDRESS, I2C_READ_DATA);
+
+	// Se habilita el send ACK
+	i2c_sendAck(&handlerTempHum);
+
+	// Lectura de state
+	state = i2c_readDataByte(&handlerTempHum);
+
+	// Lectura de hum1
+	hum1 = i2c_readDataByte(&handlerTempHum);
+
+	// Lectura de hum2
+	hum2 = i2c_readDataByte(&handlerTempHum);
+
+	// Lectura de humAndTemp
+	humAndTemp = i2c_readDataByte(&handlerTempHum);
+
+	// Lectura de temp1
+	temp1 = i2c_readDataByte(&handlerTempHum);
+
+	// Lectura de temp2
+	temp2 = i2c_readDataByte(&handlerTempHum);
+
+	// Se habilita el send NACK
+	i2c_sendNoAck(&handlerTempHum);
+
+	// Lectura de CRC
+	crc = i2c_readDataByte(&handlerTempHum);
+
+	// Se para la transacción
+	i2c_stopTransaction(&handlerTempHum);
+
+	// Se extraen las medidas de temperatura y humedad
+	temperature_read = ((temp1 << 16) | (temp2 << 8) | ((humAndTemp >> 4) & 0xF)) & 0xFFFFF;
+	humidity_read	 = (((humAndTemp & 0xF) << 16) | (hum1 << 8) | hum2) & 0xFFFFF;
+
+	temperature = (temperature_read / 1048576)*200 - 50;
+	humidity = (humidity_read / 1048576)*100;
+
+}
+
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
 
 /*	=	=	=	INICIO DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
@@ -358,6 +443,7 @@ void usart6Rx_Callback(void){
 void BasicTimer2_Callback(void){
 	GPIOxTooglePin(&handlerLEDBlinky);
 	counterLCD++;
+	counterSampling++;
 }
 
 void BasicTimer4_Callback(void){

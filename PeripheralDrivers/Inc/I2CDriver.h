@@ -61,8 +61,8 @@ void i2c_sendMemoryAddress(I2C_Handler_t *ptrHandlerI2C, uint8_t memAddr);
 void i2c_sendDataByte(I2C_Handler_t *ptrHandlerI2C, uint8_t dataToWrite);
 uint8_t i2c_readDataByte(I2C_Handler_t *ptrHandlerI2C);
 void i2c_stopTransaction(I2C_Handler_t *ptrHandlerI2C);
-void i2c_sendACK(I2C_Handler_t *ptrHandlerI2C);
-void i2c_sendNoACK(I2C_Handler_t *ptrHandlerI2C);
+void i2c_sendAck(I2C_Handler_t *ptrHandlerI2C);
+void i2c_sendNoAck(I2C_Handler_t *ptrHandlerI2C);
 
 uint8_t i2c_readSingleRegister(I2C_Handler_t *ptrHandlerI2C, uint8_t regToRead);
 uint8_t i2c_readSingleRegister_16bits(I2C_Handler_t *ptrHandlerI2C, uint8_t regToRead);

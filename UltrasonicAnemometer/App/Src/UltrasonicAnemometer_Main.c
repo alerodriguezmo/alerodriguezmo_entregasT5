@@ -38,16 +38,23 @@ USART_Handler_t handlerCommTerminal 	= {0};
 // Handlers del led de estado (Blinky)
 GPIO_Handler_t handlerLEDBlinky = {0};
 
-// Handlers de los pines Trigger del HC-SR04
+// Handlers de los pines Trigger de los HC-SR04
 GPIO_Handler_t handlerTrigX1		= {0};
 GPIO_Handler_t handlerTrigX2		= {0};
 
-// Handlers de los pines Echo del HC-SR04
-GPIO_Handler_t handlerEchoX1Rise		= {0};
-GPIO_Handler_t handlerEchoX1Fall		= {0};
+GPIO_Handler_t handlerTrigY1		= {0};
+GPIO_Handler_t handlerTrigY2		= {0};
 
-EXTI_Config_t handlerExtiEchoX1Rise		= {0};
-EXTI_Config_t handlerExtiEchoX1Fall		= {0};
+// Handlers de los pines Echo de los HC-SR04
+GPIO_Handler_t handlerEchoFallX1		= {0};
+GPIO_Handler_t handlerEchoFallX2		= {0};
+GPIO_Handler_t handlerEchoFallY1		= {0};
+GPIO_Handler_t handlerEchoFallY2		= {0};
+
+EXTI_Config_t handlerExtiEchoFallX1		= {0};
+EXTI_Config_t handlerExtiEchoFallX2		= {0};
+EXTI_Config_t handlerExtiEchoFallY1		= {0};
+EXTI_Config_t handlerExtiEchoFallY2		= {0};
 
 
 // Handlers de los timers
@@ -69,12 +76,28 @@ char bufferData[64]				= {0};
 
 // Variables auxiliares
 uint64_t stopwatch				= 0;
+
 float  timeOfFlightAB			= 0;
 float  timeOfFlightBA			= 0;
 float distanceX1				= 0;
 float distanceX2				= 0;
+
+float  timeOfFlightCD			= 0;
+float  timeOfFlightDC			= 0;
+float distanceY1				= 0;
+float distanceY2				= 0;
+
 float Vx						= {0};
 float Vx_mean					= {0};
+
+float Vy						= {0};
+float Vy_mean					= {0};
+
+float32_t V							= 0;
+float32_t squares					= 0;
+
+float atan_arg					= 0;
+float Direction					= 0;
 
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
 void initSystem(void);
@@ -211,40 +234,97 @@ void initSystem(void){
 	GPIO_WritePin(&handlerTrigX1, RESET);
 	GPIO_WritePin(&handlerTrigX2, RESET);
 
+	/*	-	-	-	EJE Y	-	-	-	*/
+
+	handlerTrigY1.pGPIOx											= GPIOA;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinNumber						= PIN_12;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_OUT;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinPuPdControl				= GPIO_PUPDR_NOTHING;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+
+	handlerTrigY2.pGPIOx											= GPIOA;
+	handlerTrigY2.GPIO_PinConfig.GPIO_PinNumber						= PIN_11;
+	handlerTrigY2.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_OUT;
+	handlerTrigY2.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
+	handlerTrigY2.GPIO_PinConfig.GPIO_PinPuPdControl				= GPIO_PUPDR_NOTHING;
+	handlerTrigY2.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
+	handlerTrigY2.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+
+	// Se cargan la configuraciones y se inicializan en 0
+	GPIO_Config(&handlerTrigY1);
+	GPIO_Config(&handlerTrigY2);
+	GPIO_WritePin(&handlerTrigY1, RESET);
+	GPIO_WritePin(&handlerTrigY2, RESET);
+
 	/*	-	-	-	Pines Echo de los HC-SR04	-	-	-	*/
 
 	/*	-	-	-	EJE X	-	-	-	*/
 
-	handlerEchoX1Rise.pGPIOx											= GPIOC;
-	handlerEchoX1Rise.GPIO_PinConfig.GPIO_PinNumber						= PIN_8;
-	handlerEchoX1Rise.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_IN;
-	handlerEchoX1Rise.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
-	handlerEchoX1Rise.GPIO_PinConfig.GPIO_PinPuPdControl				= GPIO_PUPDR_NOTHING;
-	handlerEchoX1Rise.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
-	handlerEchoX1Rise.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+	handlerEchoFallX1.pGPIOx										= GPIOC;
+	handlerEchoFallX1.GPIO_PinConfig.GPIO_PinNumber					= PIN_8;
+	handlerEchoFallX1.GPIO_PinConfig.GPIO_PinMode					= GPIO_MODE_IN;
+	handlerEchoFallX1.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
+	handlerEchoFallX1.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
+	handlerEchoFallX1.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
+	handlerEchoFallX1.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
 
-	handlerEchoX1Fall.pGPIOx											= GPIOC;
-	handlerEchoX1Fall.GPIO_PinConfig.GPIO_PinNumber						= PIN_9;
-	handlerEchoX1Fall.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_IN;
-	handlerEchoX1Fall.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
-	handlerEchoX1Fall.GPIO_PinConfig.GPIO_PinPuPdControl				= GPIO_PUPDR_NOTHING;
-	handlerEchoX1Fall.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
-	handlerEchoX1Fall.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+	handlerEchoFallX2.pGPIOx										= GPIOC;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinNumber					= PIN_9;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinMode					= GPIO_MODE_IN;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
 
-	handlerExtiEchoX1Rise.edgeType			= EXTERNAL_INTERRUPT_RISING_EDGE;
-	handlerExtiEchoX1Rise.pGPIOHandler		= &handlerEchoX1Rise;
+	handlerExtiEchoFallX1.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
+	handlerExtiEchoFallX1.pGPIOHandler		= &handlerEchoFallX1;
 
-	handlerExtiEchoX1Fall.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
-	handlerExtiEchoX1Fall.pGPIOHandler		= &handlerEchoX1Fall;
+	handlerExtiEchoFallX2.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
+	handlerExtiEchoFallX2.pGPIOHandler		= &handlerEchoFallX2;
 
 	// Se cargan las configuraciones
-	GPIO_Config(&handlerEchoX1Rise);
-	GPIO_Config(&handlerEchoX1Fall);
-	GPIO_WritePin(&handlerEchoX1Rise, RESET);
-	GPIO_WritePin(&handlerEchoX1Fall, RESET);
+	GPIO_Config(&handlerEchoFallX1);
+	GPIO_Config(&handlerEchoFallX2);
+	GPIO_WritePin(&handlerEchoFallX1, RESET);
+	GPIO_WritePin(&handlerEchoFallX2, RESET);
 
-	extInt_Config(&handlerExtiEchoX1Rise);
-	extInt_Config(&handlerExtiEchoX1Fall);
+	extInt_Config(&handlerExtiEchoFallX1);
+	extInt_Config(&handlerExtiEchoFallX2);
+
+	/*	-	-	-	EJE Y	-	-	-	*/
+
+	handlerEchoFallY1.pGPIOx										= GPIOB;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinNumber					= PIN_14;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinMode					= GPIO_MODE_IN;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
+
+	handlerEchoFallY2.pGPIOx										= GPIOB;
+	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinNumber					= PIN_15;
+	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinMode					= GPIO_MODE_IN;
+	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
+	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
+	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
+	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
+
+	handlerExtiEchoFallY1.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
+	handlerExtiEchoFallY1.pGPIOHandler		= &handlerEchoFallY1;
+
+	handlerExtiEchoFallY2.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
+	handlerExtiEchoFallY2.pGPIOHandler		= &handlerEchoFallY2;
+
+	// Se cargan las configuraciones
+	GPIO_Config(&handlerEchoFallY1);
+	GPIO_Config(&handlerEchoFallY2);
+	GPIO_WritePin(&handlerEchoFallY1, RESET);
+	GPIO_WritePin(&handlerEchoFallY2, RESET);
+
+	extInt_Config(&handlerExtiEchoFallY1);
+	extInt_Config(&handlerExtiEchoFallY2);
 
 	/*	-	-	-	Comunicación serial	-	-	-	*/
 	handlerPinTX.pGPIOx                               = GPIOA;
@@ -308,47 +388,103 @@ void parseCommands(char *ptrBufferReception){
 	// 2) measureTOF. Permite medir el tiempo de vuelo del sonido hasta un obstáculo
 	else if(strcmp(cmd,"measureTOF") == 0){
 
-		for(int i = 0; i < 3; i++){
-			// Se manda un pulso ultrasónico...
+		for(int i = 0; i < 9; i++){
+			// Pulso ultrasónico X+
 			GPIO_WritePin(&handlerTrigX1, SET);
 			delay_ms(1);
 			GPIO_WritePin(&handlerTrigX1, RESET);
+			StartTimer(&handlerStopwatch); // Se empieza a contabilizar el tiempo
 
 			delay_ms(5);
+
+			// Aquí la exti del echo detiene el conteo de tiempo
+
 			timeOfFlightAB = stopwatch / 200000.0;
 
 			distanceX1 = 348.2*timeOfFlightAB;
 
 			stopwatch = 0;
 
-			delay_ms(100);
+			delay_ms(60);
 
-			// Se manda un pulso ultrasónico...
+			// Pulso ultrasónico X-
 			GPIO_WritePin(&handlerTrigX2, SET);
 			delay_ms(1);
 			GPIO_WritePin(&handlerTrigX2, RESET);
+			StartTimer(&handlerStopwatch); // Se empieza a contabilizar el tiempo
 
 			delay_ms(5);
+
+			// Aquí la exti del echo detiene el conteo de tiempo
+
 			timeOfFlightBA = stopwatch / 200000.0;
 
 			distanceX2 = 348.2*timeOfFlightBA;
 
+			stopwatch = 0;
+
+			delay_ms(60);
+
+			// Pulso ultrasónico Y+
+			GPIO_WritePin(&handlerTrigY1, SET);
+			delay_ms(1);
+			GPIO_WritePin(&handlerTrigY1, RESET);
+			StartTimer(&handlerStopwatch); // Se empieza a contabilizar el tiempo
+
+			delay_ms(5);
+
+			// Aquí la exti del echo detiene el conteo de tiempo
+
+			timeOfFlightCD = stopwatch / 200000.0;
+
+			distanceY1 = 348.2*timeOfFlightCD;
 
 			stopwatch = 0;
 
+			delay_ms(60);
 
-			Vx =((distanceX1 + distanceX2)/4.0)*((1 / timeOfFlightAB)-(1 / timeOfFlightBA));
+			// Pulso ultrasónico Y-
+			GPIO_WritePin(&handlerTrigY2, SET);
+			delay_ms(1);
+			GPIO_WritePin(&handlerTrigY2, RESET);
+			StartTimer(&handlerStopwatch); // Se empieza a contabilizar el tiempo
 
-			Vx_mean = Vx / 3;
+			delay_ms(5);
+
+			// Aquí la exti del echo detiene el conteo de tiempo
+
+			timeOfFlightDC = stopwatch / 200000.0;
+
+			distanceY2 = 348.2*timeOfFlightDC;
+
+			stopwatch = 0;
+
+			delay_ms(60);
+
+
+			Vx = (0.47 / 2)*((1 / timeOfFlightAB)-(1 / timeOfFlightBA));
+
+			Vy = (0.475 / 2)*((1 / timeOfFlightCD)-(1 / timeOfFlightDC));
+
+			Vx_mean = Vx / 9;
+
+			Vy_mean = Vy / 9;
 
 			timeOfFlightAB = 0;
 			timeOfFlightBA = 0;
 
-			delay_ms(100);
+			timeOfFlightCD = 0;
+			timeOfFlightDC = 0;
 
 		}
 
-		sprintf(bufferData,"Vx = %.3f m/s\n", Vx_mean);
+		squares = (Vx_mean*Vx_mean) + (Vy_mean*Vy_mean);
+		arm_sqrt_f32(squares, &V);
+
+		atan_arg = Vy_mean / Vx_mean;
+		Direction = atan(atan_arg)*(180/ M_PI);
+
+		sprintf(bufferData,"V = %.3f m/s\n Angle = %.2f °\n", V, Direction);
 		writeMsg(&handlerCommTerminal, bufferData);
 
 	}
@@ -378,10 +514,22 @@ void BasicTimer4_Callback(void){
 }
 
 void callback_extInt8(void){
-	StartTimer(&handlerStopwatch);
+	// Exti del falling edge del echo de X1
+	StopTimer(&handlerStopwatch);
 }
 
 void callback_extInt9(void){
+	// Exti del falling edge del echo de X2
+	StopTimer(&handlerStopwatch);
+}
+
+void callback_extInt14(void){
+	// Exti del falling edge del echo de Y1
+	StopTimer(&handlerStopwatch);
+}
+
+void callback_extInt15(void){
+	// Exti del falling edge del echo de Y2
 	StopTimer(&handlerStopwatch);
 }
 
