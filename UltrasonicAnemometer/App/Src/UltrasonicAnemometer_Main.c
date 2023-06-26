@@ -201,7 +201,7 @@ void initSystem(void){
 	handlerStopwatch.ptrTIMx                               = TIM4;
 	handlerStopwatch.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
 	handlerStopwatch.TIMx_Config.TIMx_speed                = BTIMER_SPEED_1us;
-	handlerStopwatch.TIMx_Config.TIMx_period               = 5;
+	handlerStopwatch.TIMx_Config.TIMx_period               = 2;
 	handlerStopwatch.TIMx_Config.TIMx_interruptEnable      = 1;
 
 	// Se carga la configuración
@@ -388,7 +388,7 @@ void parseCommands(char *ptrBufferReception){
 	// 2) measureTOF. Permite medir el tiempo de vuelo del sonido hasta un obstáculo
 	else if(strcmp(cmd,"measureTOF") == 0){
 
-		for(int i = 0; i < 9; i++){
+		for(int i = 0; i < 3; i++){
 			// Pulso ultrasónico X+
 			GPIO_WritePin(&handlerTrigX1, SET);
 			delay_ms(1);
@@ -399,7 +399,7 @@ void parseCommands(char *ptrBufferReception){
 
 			// Aquí la exti del echo detiene el conteo de tiempo
 
-			timeOfFlightAB = stopwatch / 200000.0;
+			timeOfFlightAB = stopwatch / 500000.0;
 
 			distanceX1 = 348.2*timeOfFlightAB;
 
@@ -417,7 +417,7 @@ void parseCommands(char *ptrBufferReception){
 
 			// Aquí la exti del echo detiene el conteo de tiempo
 
-			timeOfFlightBA = stopwatch / 200000.0;
+			timeOfFlightBA = stopwatch / 500000.0;
 
 			distanceX2 = 348.2*timeOfFlightBA;
 
@@ -435,7 +435,7 @@ void parseCommands(char *ptrBufferReception){
 
 			// Aquí la exti del echo detiene el conteo de tiempo
 
-			timeOfFlightCD = stopwatch / 200000.0;
+			timeOfFlightCD = stopwatch / 500000.0;
 
 			distanceY1 = 348.2*timeOfFlightCD;
 
@@ -453,7 +453,7 @@ void parseCommands(char *ptrBufferReception){
 
 			// Aquí la exti del echo detiene el conteo de tiempo
 
-			timeOfFlightDC = stopwatch / 200000.0;
+			timeOfFlightDC = stopwatch / 500000.0;
 
 			distanceY2 = 348.2*timeOfFlightDC;
 
@@ -466,9 +466,9 @@ void parseCommands(char *ptrBufferReception){
 
 			Vy = (0.475 / 2)*((1 / timeOfFlightCD)-(1 / timeOfFlightDC));
 
-			Vx_mean = Vx / 9;
+			Vx_mean = Vx / 3;
 
-			Vy_mean = Vy / 9;
+			Vy_mean = Vy / 3;
 
 			timeOfFlightAB = 0;
 			timeOfFlightBA = 0;
@@ -483,6 +483,10 @@ void parseCommands(char *ptrBufferReception){
 
 		atan_arg = Vy_mean / Vx_mean;
 		Direction = atan(atan_arg)*(180/ M_PI);
+
+		if(Direction < 0){
+			Direction += 360;
+		}
 
 		sprintf(bufferData,"V = %.3f m/s\n Angle = %.2f °\n", V, Direction);
 		writeMsg(&handlerCommTerminal, bufferData);

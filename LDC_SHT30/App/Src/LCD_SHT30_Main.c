@@ -28,15 +28,7 @@
 
 /*	-	-	-	Definición de las macros a utilizar	-	-	-	*/
 
-#define TEMPHUM_ADDRESS          0x38
-
-#define HDC_TEMPERATURE          0x00
-#define HDC_HUMIDITY	         0x01
-
-#define HDC_CONFIG	             0x02
-#define HDC_DEVID	             0xFF
-
-
+#define SHT30_ADDRESS			 0x45
 #define LCD_ADDRESS				 0x24
 
 /*	-	-	-	Definición de handlers	-	-	-	*/
@@ -54,12 +46,12 @@ BasicTimer_Handler_t handlerBlinkyTimer = {0};
 BasicTimer_Handler_t handlerSampling	= {0};
 
 // Handlers del protocolo I2C
-GPIO_Handler_t handlerI2cSDA = {0};
-GPIO_Handler_t handlerI2cSCL = {0};
-GPIO_Handler_t handlerI2cLcdSCL = {0};
-GPIO_Handler_t handlerI2cLcdSDA = {0};
-I2C_Handler_t handlerTempHum = {0};
-I2C_Handler_t handlerLCD = {0};
+GPIO_Handler_t handlerI2cSDA 		= {0};
+GPIO_Handler_t handlerI2cSCL 		= {0};
+GPIO_Handler_t handlerI2cLcdSCL 	= {0};
+GPIO_Handler_t handlerI2cLcdSDA 	= {0};
+I2C_Handler_t handlerSHT30 			= {0};
+I2C_Handler_t handlerLCD 			= {0};
 
 /*	-	-	-	Definición de variables	-	-	-	*/
 char state 				= 0;
@@ -278,17 +270,17 @@ void initSystem(void){
 	handlerI2cLcdSDA.GPIO_PinConfig.GPIO_PinAltFunMode           = AF4;
 	GPIO_Config(&handlerI2cLcdSDA);
 
-	// Configuración del AHT25
-	handlerTempHum.ptrI2Cx                            = I2C3;
-	handlerTempHum.modeI2C                            = I2C_MODE_SM;
-	handlerTempHum.slaveAddress                       = TEMPHUM_ADDRESS;
-	handlerTempHum.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
-	handlerTempHum.maxI2C_FM						  = I2C_MAX_RISE_TIME_SM_16MHZ;
-	handlerTempHum.modeI2C_FM						  = I2C_MODE_SM_SPEED_100KHz_16MHz;
+	// Configuración del SHT30
+	handlerSHT30.ptrI2Cx                          = I2C1;
+	handlerSHT30.modeI2C                          = I2C_MODE_FM;
+	handlerSHT30.slaveAddress                     = SHT30_ADDRESS;
+	handlerSHT30.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
+	handlerSHT30.maxI2C_FM						  = I2C_MAX_RISE_TIME_FM_16MHz;
+	handlerSHT30.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_16MHz;
 
-	i2c_config(&handlerTempHum);
+	i2c_config(&handlerSHT30);
 
-	// Configuración del sensor de temperatura
+	// Configuración de la LCD
 	handlerLCD.ptrI2Cx                            = I2C3;
 	handlerLCD.modeI2C                            = I2C_MODE_FM;
 	handlerLCD.slaveAddress                       = LCD_ADDRESS	;
@@ -359,74 +351,59 @@ void parseCommands(char *ptrBufferReception){
 }
 
 void measureTemp_Hum(void){
-	// Delay de inicialización
-	delay_ms(100);
-
-	// TRIGGER MEASUREMENT
 	// Se manda el start
-	i2c_startTransaction(&handlerTempHum);
-
+	i2c_startTransaction(&handlerSHT30);
 
 	// Se manda el slave address con la instrucción de escribir
-	i2c_sendSlaveAddressRW(&handlerTempHum, TEMPHUM_ADDRESS, I2C_WRITE_DATA);
+	i2c_sendSlaveAddressRW(&handlerSHT30, SHT30_ADDRESS, I2C_WRITE_DATA);
 
-	// Se inicializa el sensor
-	i2c_sendDataByte(&handlerTempHum, 0b11100001);
-
-	// Se mandan los bytes que especifica el fabricante
-	i2c_sendDataByte(&handlerTempHum, 0xAC);		// Trigger measurement
-	i2c_sendDataByte(&handlerTempHum, 0b00110011);	// DATA0
-	i2c_sendDataByte(&handlerTempHum, 0b00000000);	// DATA1
+	// Se le pide al sensor que mida humedad y temperatura, con alta repetibilidad y clock stretching activado
+	i2c_sendDataByte(&handlerSHT30, 0x2C);
+	i2c_sendDataByte(&handlerSHT30, 0x06);
 
 	// Se manda el stop
-	i2c_stopTransaction(&handlerTempHum);
+	i2c_stopTransaction(&handlerSHT30);
 
-	// Delay de 100ms para que se realice la lectura
-	delay_ms(100);
+	// Se espera a que el sensor complete la medida
+	while(!(GPIO_ReadPin(&handlerI2cSCL))){
+		__NOP();
+	}
 
-	// READ MEASUREMENT
-	// Se manda el start
-	i2c_startTransaction(&handlerTempHum);
+	// Se manda el restart
+	i2c_reStartTransaction(&handlerSHT30);
 
 	// Se manda el slave address con la instrucción de leer
-	i2c_sendSlaveAddressRW(&handlerTempHum, TEMPHUM_ADDRESS, I2C_READ_DATA);
+	i2c_sendSlaveAddressRW(&handlerSHT30, SHT30_ADDRESS, I2C_READ_DATA);
 
 	// Se habilita el send ACK
-	i2c_sendAck(&handlerTempHum);
+	i2c_sendAck(&handlerSHT30);
 
-	// Lectura de state
-	state = i2c_readDataByte(&handlerTempHum);
+	// Lectura de temperatura
+	temp1 = i2c_readDataByte(&handlerSHT30);
+	temp2 = i2c_readDataByte(&handlerSHT30);
+	crc = i2c_readDataByte(&handlerSHT30);
 
-	// Lectura de hum1
-	hum1 = i2c_readDataByte(&handlerTempHum);
+	// Lectura de humedad
+	hum1 = i2c_readDataByte(&handlerSHT30);
+	hum2 = i2c_readDataByte(&handlerSHT30);
 
-	// Lectura de hum2
-	hum2 = i2c_readDataByte(&handlerTempHum);
+	// Activamos el send NACK
 
-	// Lectura de humAndTemp
-	humAndTemp = i2c_readDataByte(&handlerTempHum);
+	i2c_sendNoAck(&handlerSHT30);
 
-	// Lectura de temp1
-	temp1 = i2c_readDataByte(&handlerTempHum);
+	// Leemos ell último registro
+	crc = i2c_readDataByte(&handlerSHT30);
 
-	// Lectura de temp2
-	temp2 = i2c_readDataByte(&handlerTempHum);
+	// Mandamos el stop
+	i2c_stopTransaction(&handlerSHT30);
 
-	// Se habilita el send NACK
-	i2c_sendNoAck(&handlerTempHum);
-
-	// Lectura de CRC
-	crc = i2c_readDataByte(&handlerTempHum);
-
-	// Se para la transacción
-	i2c_stopTransaction(&handlerTempHum);
 
 	// Se extraen las medidas de temperatura y humedad
-	temperature_read = ((temp1 << 16) | (temp2 << 8) | ((humAndTemp >> 4) & 0xF)) & 0xFFFFF;
-	humidity_read	 = (((humAndTemp & 0xF) << 16) | (hum1 << 8) | hum2) & 0xFFFFF;
+	temperature_read = (temp1 << 8) | temp2;
+	humidity_read	 = (hum1 << 8) | hum2;
 
-	temperature = (temperature_read / 1048576)*200 - 50;
-	humidity = (humidity_read / 1048576)*100;
+	temperature = (temperature_read / 65535)*(175)-(45);
+	humidity = (humidity_read / 65535)*(100);
 
 }
 
