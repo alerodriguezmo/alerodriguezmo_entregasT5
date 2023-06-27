@@ -50,14 +50,14 @@ I2C_Handler_t handlerLCD 			= {0};
 
 // Handlers de los pines Trigger de los HC-SR04
 GPIO_Handler_t handlerTrigX1		= {0};
-//GPIO_Handler_t handlerTrigX2		= {0};
+GPIO_Handler_t handlerTrigX2		= {0};
 
 // Handlers de los pines Echo de los HC-SR04
 GPIO_Handler_t handlerEchoFallX1		= {0};
-//GPIO_Handler_t handlerEchoFallX2		= {0};
+GPIO_Handler_t handlerEchoFallX2		= {0};
 
 EXTI_Config_t handlerExtiEchoFallX1		= {0};
-//EXTI_Config_t handlerExtiEchoFallX2		= {0};
+EXTI_Config_t handlerExtiEchoFallX2		= {0};
 
 /*	-	-	-	Definición de variables	-	-	-	*/
 char state 				= 0;
@@ -70,23 +70,27 @@ char crc 				= 0;
 
 char bufferTemp[64];
 char bufferHum[64];
-float temperature_read = 0;
+float temperature_read 	= 0;
 float humidity_read 	= 0;
-float temperature 	= 0;
-float humidity	 	= 0;
+float temperature 		= 0;
+float humidity	 		= 0;
 
-uint8_t counterLCD = 0;
+uint8_t counterLCD		= 0;
 uint8_t counterSampling = 0;
 
 uint8_t i2cBuffer 		= {0};
 
 char bufferTOF[64];
 char bufferDist[64];
-float stopwatch		= 0;
+float stopwatch			= 0;
 float  timeOfFlightAB	= 0;
-//float  timeOfFlightBA	= 0;
+float  timeOfFlightBA	= 0;
 float distanceX1		= 0;
-//float distanceX2		= 0;
+float distanceX2		= 0;
+
+uint8_t flagExtiX1 = 0;
+uint8_t flagExtiX2 = 0;
+
 
 
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
@@ -317,19 +321,19 @@ void initSystem(void){
 	handlerTrigX1.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
 	handlerTrigX1.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
 
-//	handlerTrigX2.pGPIOx											= GPIOC;
-//	handlerTrigX2.GPIO_PinConfig.GPIO_PinNumber						= PIN_6;
-//	handlerTrigX2.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_OUT;
-//	handlerTrigX2.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
-//	handlerTrigX2.GPIO_PinConfig.GPIO_PinPuPdControl				= GPIO_PUPDR_NOTHING;
-//	handlerTrigX2.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
-//	handlerTrigX2.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+	handlerTrigX2.pGPIOx											= GPIOC;
+	handlerTrigX2.GPIO_PinConfig.GPIO_PinNumber						= PIN_6;
+	handlerTrigX2.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_OUT;
+	handlerTrigX2.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
+	handlerTrigX2.GPIO_PinConfig.GPIO_PinPuPdControl				= GPIO_PUPDR_NOTHING;
+	handlerTrigX2.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
+	handlerTrigX2.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
 
 	// Se cargan la configuraciones y se inicializan en 0
 	GPIO_Config(&handlerTrigX1);
-//	GPIO_Config(&handlerTrigX2);
+	GPIO_Config(&handlerTrigX2);
 	GPIO_WritePin(&handlerTrigX1, RESET);
-//	GPIO_WritePin(&handlerTrigX2, RESET);
+	GPIO_WritePin(&handlerTrigX2, RESET);
 
 	/*	-	-	-	Pines Echo de los HC-SR04	-	-	-	*/
 
@@ -343,28 +347,28 @@ void initSystem(void){
 	handlerEchoFallX1.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
 	handlerEchoFallX1.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
 
-//	handlerEchoFallX2.pGPIOx										= GPIOC;
-//	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinNumber					= PIN_2;
-//	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinMode					= GPIO_MODE_IN;
-//	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
-//	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
-//	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
-//	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
+	handlerEchoFallX2.pGPIOx										= GPIOB;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinNumber					= PIN_14;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinMode					= GPIO_MODE_IN;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
+	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
 
 	handlerExtiEchoFallX1.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
 	handlerExtiEchoFallX1.pGPIOHandler		= &handlerEchoFallX1;
 
-//	handlerExtiEchoFallX2.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
-//	handlerExtiEchoFallX2.pGPIOHandler		= &handlerEchoFallX2;
+	handlerExtiEchoFallX2.edgeType			= EXTERNAL_INTERRUPT_RISING_EDGE;
+	handlerExtiEchoFallX2.pGPIOHandler		= &handlerEchoFallX2;
 
 	// Se cargan las configuraciones
 	GPIO_Config(&handlerEchoFallX1);
-//	GPIO_Config(&handlerEchoFallX2);
+	GPIO_Config(&handlerEchoFallX2);
 	GPIO_WritePin(&handlerEchoFallX1, RESET);
-//	GPIO_WritePin(&handlerEchoFallX2, RESET);
+	GPIO_WritePin(&handlerEchoFallX2, RESET);
 
 	extInt_Config(&handlerExtiEchoFallX1);
-//	extInt_Config(&handlerExtiEchoFallX2);
+	extInt_Config(&handlerExtiEchoFallX2);
 
 }
 
@@ -445,6 +449,8 @@ void measureTOF_X1(void){
 	// Pulso ultrasónico X+
 	GPIO_WritePin(&handlerTrigX1, SET);
 	delay_ms(1);
+	// Habilitamos la recepción de la Exti
+	flagExtiX1 = 1;
 	GPIO_WritePin(&handlerTrigX1, RESET);
 	StartTimer(&handlerSamplingTOF);
 
@@ -452,7 +458,7 @@ void measureTOF_X1(void){
 
 	// Aquí la exti del echo detiene el conteo de tiempo
 
-	timeOfFlightAB = (200*stopwatch / 100000000) - 0.00040525; // Factor de corrección experimental
+	timeOfFlightAB = (200*stopwatch / 100000000);  // Factor de corrección experimental - 0.00040525;
 
 	distanceX1 = (331+0.6*temperature)*timeOfFlightAB -0.008; // Factor de correción experimental
 
@@ -461,22 +467,24 @@ void measureTOF_X1(void){
 	delay_ms(60);
 
 	// Pulso ultrasónico X-
-//	GPIO_WritePin(&handlerTrigX2, SET);
-//	delay_ms(1);
-//	GPIO_WritePin(&handlerTrigX2, RESET);
-//	StartTimer(&handlerSamplingTOF);
-//
-//	delay_ms(5);
-//
-//	// Aquí la exti del echo detiene el conteo de tiempo
-//
-//	timeOfFlightBA = (200*stopwatch / 100000000) - 0.00040525; // Factor de corrección experimental
-//
-//	distanceX2 = (331+0.6*temperature)*timeOfFlightBA -0.008; // Factor de correción experimental
-//
-//	stopwatch = 0;
-//
-//	delay_ms(60);
+	GPIO_WritePin(&handlerTrigX2, SET);
+	delay_ms(1);
+	// Habilitamos la recepción de la Exti
+	flagExtiX2 = 1;
+	GPIO_WritePin(&handlerTrigX2, RESET);
+	StartTimer(&handlerSamplingTOF);
+
+	delay_ms(5);
+
+	// Aquí la exti del echo detiene el conteo de tiempo
+
+	timeOfFlightBA = (200*stopwatch / 100000000); // Factor de corrección experimental  - 0.00040525
+
+	distanceX2 = (331+0.6*temperature)*timeOfFlightBA -0.008; // Factor de correción experimental
+
+	stopwatch = 0;
+
+	delay_ms(60);
 }
 
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
@@ -497,12 +505,19 @@ void BasicTimer5_Callback(void){
 }
 
 void callback_extInt1(void){
-	// Exti del falling edge del echo de X1
-	StopTimer(&handlerSamplingTOF);
+	if(flagExtiX1){
+		// Exti del falling edge del echo de X1
+		StopTimer(&handlerSamplingTOF);
+		flagExtiX1 = 0;
+	}
+
 }
 
-//void callback_extInt2(void){
-//	// Exti del falling edge del echo de X2
-//	StopTimer(&handlerSamplingTOF);
-//}
+void callback_extInt14(void){
+	if(flagExtiX2){
+		// Exti del falling edge del echo de X2
+		StopTimer(&handlerSamplingTOF);
+		flagExtiX2 = 0;
+	}
+}
 /*	=	=	=	FIN DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
