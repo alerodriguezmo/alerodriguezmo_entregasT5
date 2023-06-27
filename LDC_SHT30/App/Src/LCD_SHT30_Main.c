@@ -33,11 +33,6 @@
 
 /*	-	-	-	Definición de handlers	-	-	-	*/
 
-// Handlers de la comunicacion serial
-GPIO_Handler_t handlerPinTX 			= {0};
-GPIO_Handler_t handlerPinRX 			= {0};
-USART_Handler_t handlerCommTerminal 	= {0};
-
 // Handler del led de estado (Blinky)
 GPIO_Handler_t handlerLEDBlinky = {0};
 
@@ -74,31 +69,26 @@ uint8_t counterSampling = 0;
 
 uint8_t i2cBuffer 		= {0};
 
-// Variables de la comunicación serial por comandos
-uint8_t rxData 					= 0;
-uint8_t counterReception		= 0;
-bool stringComplete 			= false;
-int firstParameter				= 0;
-int secondParameter				= 0;
-int thirdParameter				= 0;
-char bufferReception[64]		= {0};
-char cmd[64]					= {0};
-char bufferData[64]				= {0};
-
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
 void tuneMCU(void);
 void initSystem(void);
 void parseCommands(char *ptrBufferReception);
 void measureTemp_Hum(void);
+void resetSHT30(void);
 /*	=	=	=	INICIO DEL MAIN	=	=	=	*/
 int main (void){
 
 	// Se afina el MCU
 	tuneMCU();
 
-	// Se inicializan todos los sistemas, menos la pantalla LCD
+	// Se pone el MCU a 100MHz
+	configPLL(1);
 
+	// Se inicializan todos los sistemas, menos la pantalla LCD
 	initSystem();
+
+	// Se reseta el SHT30
+	resetSHT30();
 
 	// Se inicializa la pantala LCD
 	clearScreenLCD(&handlerLCD);
@@ -124,45 +114,12 @@ int main (void){
 
 	delay_ms(20);
 
-	// Se imprime un mensaje de inicio por la terminal serial
-	writeMsg(&handlerCommTerminal, "TAREA ESPECIAL - Taller V (2023-01) \n"
-			"Alejandro Rodriguez Montes \n"
-			"Presione la tecla 'h' para ver los comandos disponibles \n");
-
-
-
 	while(1){
-
-
-		/*	-	-	-	Comunicación por comandos	-	-	-	*/
-		if (rxData != '\0'){
-			bufferReception[counterReception] = rxData;
-			counterReception++;
-
-			// Si el caracter que llega representa un cambio de línea, se levanta una
-			// bandera para el loop main
-			if (rxData == '@'){
-				stringComplete = true;
-
-				// Se agrega el caracter nulo al final del string
-				bufferReception[counterReception] = '\0';
-
-				counterReception = 0;
-			}
-
-			// Para que no vuelva a entrar. Solo cambia debido a la interrupción
-			rxData = '\0';
-		}
-
-		// Hacemos un análisis de la cadena de datos obtenida
-		else if (stringComplete){
-			parseCommands(bufferReception);
-			stringComplete = false;
-		}
 
 		// Ciclo que muestrea temperatura y humedad
 		if(counterSampling > 2){
 			measureTemp_Hum();
+			counterSampling = 0;
 		}
 		// Ciclo que permite actualizar las lecturas en pantalla
 		if(counterLCD > 4){
@@ -191,11 +148,19 @@ void tuneMCU(void){
 	RCC->CR &= ~(RCC_CR_HSITRIM);
 	RCC->CR |= 13 << RCC_CR_HSITRIM_Pos;
 
+	// Se establece el escalado del APB1 para que reciba los 25MHz para no exceder su frecuencia máxima
+	RCC->CFGR &= ~(RCC_CFGR_PPRE1);
+	RCC->CFGR |= RCC_CFGR_PPRE1_DIV4;
+
+	// Se enciende la señal de reloj del APB1
+	RCC->APB1ENR &= ~(RCC_APB1ENR_PWREN);
+	RCC->APB1ENR |= RCC_APB1ENR_PWREN;
+
 	// Se activa el coprocesador matematico FPU
 	SCB->CPACR |= (0xF << 20);
 
-	// Se configura el systick a 16MHz
-	config_SysTick_ms(0);
+	// Se configura el systick a 100MHz
+	config_SysTick_ms(2);
 }
 
 
@@ -221,7 +186,7 @@ void initSystem(void){
 	// Configuracion del TIM2 para que haga un blinky cada 250ms
 	handlerBlinkyTimer.ptrTIMx                               = TIM2;
 	handlerBlinkyTimer.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
-	handlerBlinkyTimer.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100us;
+	handlerBlinkyTimer.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100Mhz_100us;
 	handlerBlinkyTimer.TIMx_Config.TIMx_period               = 2500;
 	handlerBlinkyTimer.TIMx_Config.TIMx_interruptEnable      = 1;
 
@@ -274,9 +239,9 @@ void initSystem(void){
 	handlerSHT30.ptrI2Cx                          = I2C1;
 	handlerSHT30.modeI2C                          = I2C_MODE_FM;
 	handlerSHT30.slaveAddress                     = SHT30_ADDRESS;
-	handlerSHT30.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
-	handlerSHT30.maxI2C_FM						  = I2C_MAX_RISE_TIME_FM_16MHz;
-	handlerSHT30.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_16MHz;
+	handlerSHT30.mainClock						  = MAIN_CLOCK_100_MHz_FOR_I2C;
+	handlerSHT30.maxI2C_FM						  = I2C_MAX_RISE_TIME_FM_100MHz;
+	handlerSHT30.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_100MHz;
 
 	i2c_config(&handlerSHT30);
 
@@ -284,70 +249,12 @@ void initSystem(void){
 	handlerLCD.ptrI2Cx                            = I2C3;
 	handlerLCD.modeI2C                            = I2C_MODE_FM;
 	handlerLCD.slaveAddress                       = LCD_ADDRESS	;
-	handlerLCD.mainClock						  = MAIN_CLOCK_16_MHz_FOR_I2C;
-	handlerLCD.maxI2C_FM						  = I2C_MAX_RISE_TIME_FM_16MHz;
-	handlerLCD.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_16MHz;
+	handlerLCD.mainClock						  = MAIN_CLOCK_100_MHz_FOR_I2C;
+	handlerLCD.maxI2C_FM						  = I2C_MAX_RISE_TIME_FM_100MHz;
+	handlerLCD.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_100MHz;
 
 	i2c_config(&handlerLCD);
 
-	/*	-	-	-	Comunicación serial	-	-	-	*/
-	handlerPinTX.pGPIOx                               = GPIOA;
-	handlerPinTX.GPIO_PinConfig.GPIO_PinNumber        = PIN_2;
-	handlerPinTX.GPIO_PinConfig.GPIO_PinMode          = GPIO_MODE_ALTFN;
-	handlerPinTX.GPIO_PinConfig.GPIO_PinAltFunMode    = AF7;
-
-	// Se carga la configuración
-	GPIO_Config(&handlerPinTX);
-
-	handlerPinRX.pGPIOx                               = GPIOA;
-	handlerPinRX.GPIO_PinConfig.GPIO_PinNumber        = PIN_3;
-	handlerPinRX.GPIO_PinConfig.GPIO_PinMode          = GPIO_MODE_ALTFN;
-	handlerPinRX.GPIO_PinConfig.GPIO_PinAltFunMode    = AF7;
-
-	// Se carga la configuración
-	GPIO_Config(&handlerPinRX);
-
-	handlerCommTerminal.ptrUSARTx                       = USART2;
-	handlerCommTerminal.USART_Config.USART_baudrate     = USART_BAUDRATE_115200;
-	handlerCommTerminal.USART_Config.USART_datasize     = USART_DATASIZE_8BIT;
-	handlerCommTerminal.USART_Config.USART_parity       = USART_PARITY_NONE;
-	handlerCommTerminal.USART_Config.USART_stopbits     = USART_STOPBIT_1;
-	handlerCommTerminal.USART_Config.USART_mode         = USART_MODE_RXTX;
-	handlerCommTerminal.USART_Config.USART_enableIntRX  = USART_RX_INTERRUP_ENABLE;
-	handlerCommTerminal.USART_Config.USART_enableIntTX  = USART_TX_INTERRUP_DISABLE;
-	handlerCommTerminal.USART_Config.USART_frequency    = 16;
-
-	// Se carga la configuración
-	USART_Config(&handlerCommTerminal);
-
-}
-void parseCommands(char *ptrBufferReception){
-
-	/* Esta función lee la cadena de caracteres a la que apunta el puntero
-	 * y almacena en tres elementos diferentes: Un string llamado "cmd", y dos
-	 * integers llamados "firstParameter y secondParameter.
-	 *
-	 * De esta forma, podemos introducir información al micro desde el puerto serial*/
-	sscanf(ptrBufferReception, "%s %u %u %u", cmd, &firstParameter, &secondParameter, &thirdParameter);
-
-	// 1) help. Imprime una lista con todos los comandos disponibles
-	if(strcmp(cmd, "help") == 0){
-		writeMsg(&handlerCommTerminal, "\n");
-		writeMsg(&handlerCommTerminal, "HELP MENU - LIST OF AVAILABLE COMMANDS:\n");
-		writeMsg(&handlerCommTerminal, "\n");
-		writeMsg(&handlerCommTerminal, "1) help\n");
-		writeMsg(&handlerCommTerminal, "Print this menu\n");
-		writeMsg(&handlerCommTerminal, "\n");
-		writeMsg(&handlerCommTerminal, "2) measureTOF\n");
-		writeMsg(&handlerCommTerminal, "Measures time of flight of sound to a given obstacle\n");
-		writeMsg(&handlerCommTerminal, "\n");
-	}
-	else{
-		// Se imprime el mensaje "Wrong CMD" si la escritura no corresponde a los CMD implementados
-		writeMsg(&handlerCommTerminal, "\n");
-		writeMsg(&handlerCommTerminal, "Wrong CMD\n");
-		writeMsg(&handlerCommTerminal, "\n");
-	}
 }
 
 void measureTemp_Hum(void){
@@ -407,14 +314,27 @@ void measureTemp_Hum(void){
 
 }
 
+void resetSHT30(void){
+	// Se manda el start
+	i2c_startTransaction(&handlerSHT30);
+
+	// Se manda el slave address con la instrucción de escribir
+	i2c_sendSlaveAddressRW(&handlerSHT30, SHT30_ADDRESS, I2C_WRITE_DATA);
+
+	// Se le pide al sensor que se resetee
+	i2c_sendDataByte(&handlerSHT30, 0x30);
+	i2c_sendDataByte(&handlerSHT30, 0xA2);
+
+	// Se manda el stop
+	i2c_stopTransaction(&handlerSHT30);
+
+}
+
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
 
 /*	=	=	=	INICIO DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
 
 /* Callbacks de las interrupciones */
-void usart6Rx_Callback(void){
-	rxData = getRxData();
-}
 
 /* Callbacks de los Timers */
 void BasicTimer2_Callback(void){
