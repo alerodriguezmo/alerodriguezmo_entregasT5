@@ -37,8 +37,9 @@
 GPIO_Handler_t handlerLEDBlinky = {0};
 
 // Handlers de los timers
-BasicTimer_Handler_t handlerBlinkyTimer = {0};
-BasicTimer_Handler_t handlerSamplingTOF	= {0};
+BasicTimer_Handler_t handlerBlinkyTimer		= {0};
+BasicTimer_Handler_t handlerSamplingTOFX	= {0};
+BasicTimer_Handler_t handlerSamplingTOFY	= {0};
 
 // Handlers del protocolo I2C
 GPIO_Handler_t handlerI2cSDA 		= {0};
@@ -52,12 +53,20 @@ I2C_Handler_t handlerLCD 			= {0};
 GPIO_Handler_t handlerTrigX1		= {0};
 GPIO_Handler_t handlerTrigX2		= {0};
 
+GPIO_Handler_t handlerTrigY1		= {0};
+//GPIO_Handler_t handlerTrigY2		= {0};
+
 // Handlers de los pines Echo de los HC-SR04
 GPIO_Handler_t handlerEchoFallX1		= {0};
 GPIO_Handler_t handlerEchoFallX2		= {0};
-
 EXTI_Config_t handlerExtiEchoFallX1		= {0};
 EXTI_Config_t handlerExtiEchoFallX2		= {0};
+
+GPIO_Handler_t handlerEchoFallY1		= {0};
+//GPIO_Handler_t handlerEchoFallY2		= {0};
+EXTI_Config_t handlerExtiEchoFallY1		= {0};
+//EXTI_Config_t handlerExtiEchoFallY2		= {0};
+
 
 /*	-	-	-	Definición de variables	-	-	-	*/
 char state 				= 0;
@@ -86,15 +95,29 @@ char bufferVx[64];
 uint64_t stopwatch		= 0;
 float  timeOfFlightAB	= 0;
 float  timeOfFlightBA	= 0;
+float  timeOfFlightCD	= 0;
+//float  timeOfFlightDC	= 0;
 float distanceX1		= 0;
 float distanceX2		= 0;
+float distanceY1		= 0;
+//float distanceY2		= 0;
 
 float Vx = 0;
 float Vx_mean = 0;
 float Vx_report = 0;
 
+float Vy = 0;
+float Vy_mean = 0;
+float Vy_report = 0;
+
+float V = 0;
+float V_mean = 0;
+float V_report = 0;
+
 uint8_t flagExtiX1 = 0;
 uint8_t flagExtiX2 = 0;
+uint8_t flagExtiY1 = 0;
+//uint8_t flagExtiY2 = 0;
 
 
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
@@ -231,15 +254,25 @@ void initSystem(void){
 	BasicTimer_Config(&handlerBlinkyTimer);
 	StartTimer(&handlerBlinkyTimer);
 
-	// Configuración del TIM5 para la medición de los tiempos de vuelo
-	handlerSamplingTOF.ptrTIMx                               = TIM5;
-	handlerSamplingTOF.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
-	handlerSamplingTOF.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100Mhz_100ns;
-	handlerSamplingTOF.TIMx_Config.TIMx_period               = 2;
-	handlerSamplingTOF.TIMx_Config.TIMx_interruptEnable      = 1;
+	// Configuración del TIM4 para la medición de los tiempos de vuelo del eje x
+	handlerSamplingTOFX.ptrTIMx                               = TIM4;
+	handlerSamplingTOFX.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
+	handlerSamplingTOFX.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100Mhz_100ns;
+	handlerSamplingTOFX.TIMx_Config.TIMx_period               = 2;
+	handlerSamplingTOFX.TIMx_Config.TIMx_interruptEnable      = 1;
 
-	// Se carga la configuración y se inicializa el timer
-	BasicTimer_Config(&handlerSamplingTOF);
+	// Se carga la configuración
+	BasicTimer_Config(&handlerSamplingTOFX);
+
+	// Configuración del TIM5 para la medición de los tiempos de vuelo del eje y
+	handlerSamplingTOFY.ptrTIMx                               = TIM5;
+	handlerSamplingTOFY.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
+	handlerSamplingTOFY.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100Mhz_100ns;
+	handlerSamplingTOFY.TIMx_Config.TIMx_period               = 2;
+	handlerSamplingTOFY.TIMx_Config.TIMx_interruptEnable      = 1;
+
+	// Se carga la configuración
+	BasicTimer_Config(&handlerSamplingTOFY);
 
 	/*	-	-	-	Protocolo I2C	-	-	-	*/
 
@@ -328,6 +361,30 @@ void initSystem(void){
 	GPIO_WritePin(&handlerTrigX1, RESET);
 	GPIO_WritePin(&handlerTrigX2, RESET);
 
+	/*	-	-	-	EJE Y	-	-	-	*/
+
+	handlerTrigY1.pGPIOx											= GPIOA;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinNumber						= PIN_12;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_OUT;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinPuPdControl				= GPIO_PUPDR_NOTHING;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
+	handlerTrigY1.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+
+//	handlerTrigY2.pGPIOx											= GPIOA;
+//	handlerTrigY2.GPIO_PinConfig.GPIO_PinNumber						= PIN_11;
+//	handlerTrigY2.GPIO_PinConfig.GPIO_PinMode						= GPIO_MODE_OUT;
+//	handlerTrigY2.GPIO_PinConfig.GPIO_PinOPType						= GPIO_OTYPE_PUSHPULL;
+//	handlerTrigY2.GPIO_PinConfig.GPIO_PinPuPdControl				= GPIO_PUPDR_NOTHING;
+//	handlerTrigY2.GPIO_PinConfig.GPIO_PinSpeed						= GPIO_OSPEED_FAST;
+//	handlerTrigY2.GPIO_PinConfig.GPIO_PinAltFunMode					= AF0;
+
+	// Se cargan la configuraciones y se inicializan en 0
+	GPIO_Config(&handlerTrigY1);
+//	GPIO_Config(&handlerTrigY2);
+	GPIO_WritePin(&handlerTrigY1, RESET);
+//	GPIO_WritePin(&handlerTrigY2, RESET);
+
 	/*	-	-	-	Pines Echo de los HC-SR04	-	-	-	*/
 
 	/*	-	-	-	EJE X	-	-	-	*/
@@ -362,6 +419,37 @@ void initSystem(void){
 	extInt_Config(&handlerExtiEchoFallX1);
 	extInt_Config(&handlerExtiEchoFallX2);
 
+	/*	-	-	-	EJE Y	-	-	-	*/
+
+	handlerEchoFallY1.pGPIOx										= GPIOC;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinNumber					= PIN_2;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinMode					= GPIO_MODE_IN;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
+	handlerEchoFallY1.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
+
+//	handlerEchoFallY2.pGPIOx										= GPIOC;
+//	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinNumber					= PIN_15;
+//	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinMode					= GPIO_MODE_IN;
+//	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
+//	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
+//	handlerEchoFallY2.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
+
+	handlerExtiEchoFallY1.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
+	handlerExtiEchoFallY1.pGPIOHandler		= &handlerEchoFallY1;
+
+//	handlerExtiEchoFallY2.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
+//	handlerExtiEchoFallY2.pGPIOHandler		= &handlerEchoFallY2;
+
+	// Se cargan las configuraciones
+	GPIO_Config(&handlerEchoFallY1);
+//	GPIO_Config(&handlerEchoFallY2);
+	GPIO_WritePin(&handlerEchoFallY1, RESET);
+//	GPIO_WritePin(&handlerEchoFallY2, RESET);
+
+	extInt_Config(&handlerExtiEchoFallY1);
+//	extInt_Config(&handlerExtiEchoFallY2);
 }
 
 void measureTemp_Hum(void){
@@ -445,13 +533,13 @@ void measureTOF_X1(void){
 		// Habilitamos la recepción de la Exti
 		flagExtiX1 = 1;
 		GPIO_WritePin(&handlerTrigX1, RESET);
-		StartTimer(&handlerSamplingTOF); // INICIO DEL TIMER
+		StartTimer(&handlerSamplingTOFX); // INICIO DEL TIMER
 
 		delay_ms(5);
 
-		// Aquí la exti del echo de X1 para el timer
+		// Aquí la exti del echo de X1 para el timer correspondiente
 
-		timeOfFlightAB = (200*((float)stopwatch) / 100000000) - 0.00040525;  // Factor de corrección experimental
+		timeOfFlightAB = (200*((float)(stopwatch)) / 100000000) - 0.00040525;  // Factor de corrección experimental
 
 		distanceX1 = (331+0.6*temperature)*timeOfFlightAB;
 
@@ -464,7 +552,7 @@ void measureTOF_X1(void){
 		// Habilitamos la recepción de la Exti
 		flagExtiX2 = 1;
 		GPIO_WritePin(&handlerTrigX2, RESET);
-		StartTimer(&handlerSamplingTOF);
+		StartTimer(&handlerSamplingTOFX);
 
 		delay_ms(5);
 
@@ -474,6 +562,49 @@ void measureTOF_X1(void){
 
 		distanceX2 = (331+0.6*temperature)*timeOfFlightBA;
 		stopwatch = 0;
+		delay_ms(60);
+
+		// Pulso ultrasónico Y+
+		GPIO_WritePin(&handlerTrigY1, SET);
+		delay_ms(1);
+		// Habilitamos la recepción de la Exti
+		flagExtiY1 = 1;
+		GPIO_WritePin(&handlerTrigY1, RESET);
+		StartTimer(&handlerSamplingTOFY);
+
+		delay_ms(5);
+
+		// Aquí la exti del echo de Y1 para el timer
+
+		timeOfFlightCD = (200*(float)(stopwatch+432)/ 100000000) - 0.00040525; // Factor de corrección experimental
+
+		distanceY1 = (331+0.6*temperature)*timeOfFlightCD;
+		stopwatch = 0;
+		delay_ms(60);
+
+		Vx = (0.475 / 2)*((1 / timeOfFlightBA)-(1 / timeOfFlightAB));
+		Vx_mean += Vx/4;
+
+		delay_ms(60);
+
+//		// Pulso ultrasónico Y-
+//		GPIO_WritePin(&handlerTrigY2, SET);
+//		delay_ms(1);
+//		// Habilitamos la recepción de la Exti
+//		flagExtiY2 = 1;
+//		GPIO_WritePin(&handlerTrigY2, RESET);
+//		StartTimer(&handlerSamplingTOFY);
+//
+//		delay_ms(5);
+//
+//		// Aquí la exti del echo de Y2 para el timer
+//
+//		timeOfFlightDC = (200*(float)(stopwatch+432)/ 100000000) - 0.00040525; // Factor de corrección experimental
+//
+//		distanceY2 = (331+0.6*temperature)*timeOfFlightDC;
+//		stopwatch = 0;
+//		delay_ms(60);
+
 
 		Vx = (0.475 / 2)*((1 / timeOfFlightBA)-(1 / timeOfFlightAB));
 		Vx_mean += Vx/4;
@@ -497,6 +628,10 @@ void BasicTimer2_Callback(void){
 	counterSampling++;
 }
 
+void BasicTimer4_Callback(void){
+	stopwatch++;
+}
+
 void BasicTimer5_Callback(void){
 	stopwatch++;
 }
@@ -504,16 +639,32 @@ void BasicTimer5_Callback(void){
 void callback_extInt1(void){
 	if(flagExtiX1){
 		// Exti del falling edge del echo de X1
-		StopTimer(&handlerSamplingTOF);
+		StopTimer(&handlerSamplingTOFX);
 		flagExtiX1 = 0;
+	}
+}
+
+void callback_extInt2(void){
+	if(flagExtiY1){
+		// Exti del falling edge del echo de Y1
+		StopTimer(&handlerSamplingTOFY);
+		flagExtiY1 = 0;
 	}
 }
 
 void callback_extInt14(void){
 	if(flagExtiX2){
 		// Exti del falling edge del echo de X2
-		StopTimer(&handlerSamplingTOF);
+		StopTimer(&handlerSamplingTOFX);
 		flagExtiX2 = 0;
 	}
 }
+
+//void callback_extInt15(void){
+//	if(flagExtiY2){
+//		// Exti del falling edge del echo de Y2
+//		StopTimer(&handlerSamplingTOFY);
+//		flagExtiY2 = 0;
+//	}
+//}
 /*	=	=	=	FIN DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
