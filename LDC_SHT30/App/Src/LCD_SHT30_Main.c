@@ -22,9 +22,10 @@
 #include "USARTxDriver.h"
 #include "SysTickDriver.h"
 #include "I2CDriver.h"
-#include "PwmDriver.h"
 #include "PLLDriver.h"
 #include "DriverLCD.h"
+
+#include "arm_math.h"
 
 /*	-	-	-	Definición de las macros a utilizar	-	-	-	*/
 
@@ -69,6 +70,8 @@ EXTI_Config_t handlerExtiEchoFallY2		= {0};
 
 
 /*	-	-	-	Definición de variables	-	-	-	*/
+
+// Variables para la implementación del sensor de humedad y temperatura
 char state 				= 0;
 char hum1 				= 0;
 char hum2 				= 0;
@@ -84,11 +87,13 @@ float humidity_read 	= 0;
 float temperature 		= 0;
 float humidity	 		= 0;
 
+// Variables para la implementación de la pantalla LCD
 uint8_t counterLCD		= 0;
 uint8_t counterSampling = 0;
 
 uint8_t i2cBuffer 		= {0};
 
+// Variables para la implementación de los sensores ultrasónicos HC-SR04
 char bufferTOF[64];
 char bufferDist[64];
 char bufferVx[64];
@@ -113,6 +118,8 @@ float Vy_report = 0;
 float V = 0;
 float V_mean = 0;
 float V_report = 0;
+
+float squares = 0;
 
 uint8_t flagExtiX1 = 0;
 uint8_t flagExtiX2 = 0;
@@ -544,7 +551,7 @@ void measureTOF_X1(void){
 		distanceX1 = (331+0.6*temperature)*timeOfFlightAB;
 
 		stopwatch = 0;
-		delay_ms(60);
+		delay_ms(40);
 
 		// Pulso ultrasónico X-
 		GPIO_WritePin(&handlerTrigX2, SET);
@@ -562,7 +569,7 @@ void measureTOF_X1(void){
 
 		distanceX2 = (331+0.6*temperature)*timeOfFlightBA;
 		stopwatch = 0;
-		delay_ms(60);
+		delay_ms(40);
 
 		// Pulso ultrasónico Y+
 		GPIO_WritePin(&handlerTrigY1, SET);
@@ -580,12 +587,11 @@ void measureTOF_X1(void){
 
 		distanceY1 = (331+0.6*temperature)*timeOfFlightCD;
 		stopwatch = 0;
-		delay_ms(60);
+		delay_ms(40);
 
 		Vx = (0.475 / 2)*((1 / timeOfFlightBA)-(1 / timeOfFlightAB));
 		Vx_mean += Vx/4;
 
-		delay_ms(60);
 
 		// Pulso ultrasónico Y-
 		GPIO_WritePin(&handlerTrigY2, SET);
@@ -603,13 +609,8 @@ void measureTOF_X1(void){
 
 		distanceY2 = (331+0.6*temperature)*timeOfFlightDC;
 		stopwatch = 0;
-		delay_ms(60);
 
-
-		Vx = (0.475 / 2)*((1 / timeOfFlightBA)-(1 / timeOfFlightAB));
-		Vx_mean += Vx/4;
-
-		delay_ms(60);
+		delay_ms(40);
 	}
 	Vx_report = Vx_mean;
 	Vx_mean = 0;
