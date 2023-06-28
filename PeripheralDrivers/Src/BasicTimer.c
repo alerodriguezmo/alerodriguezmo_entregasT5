@@ -131,11 +131,11 @@ void BasicTimer_Config(BasicTimer_Handler_t *ptrBTimerHandler){
 
 void StartTimer(BasicTimer_Handler_t *ptrBTimerHandler){
 	ptrBTimerHandler->ptrTIMx->CR1 |= TIM_CR1_CEN;
-	ptrBTimerHandler->ptrTIMx->CNT = 0;
+//	ptrBTimerHandler->ptrTIMx->CNT = 0;
 }
 void StopTimer(BasicTimer_Handler_t *ptrBTimerHandler){
 	ptrBTimerHandler->ptrTIMx->CR1 &= ~(TIM_CR1_CEN);
-	ptrBTimerHandler->ptrTIMx->CNT = 0;
+//	ptrBTimerHandler->ptrTIMx->CNT = 0;
 };
 
 __attribute__((weak)) void BasicTimer2_Callback(void){

@@ -82,15 +82,17 @@ uint8_t i2cBuffer 		= {0};
 
 char bufferTOF[64];
 char bufferDist[64];
-float stopwatch			= 0;
+char bufferVx[64];
+uint64_t stopwatch		= 0;
 float  timeOfFlightAB	= 0;
 float  timeOfFlightBA	= 0;
 float distanceX1		= 0;
 float distanceX2		= 0;
 
+float Vx = 0;
+
 uint8_t flagExtiX1 = 0;
 uint8_t flagExtiX2 = 0;
-
 
 
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
@@ -135,11 +137,7 @@ int main (void){
 
 	// Etiquieta de tempo de vuelo
 	moveCursor_inLCD(&handlerLCD, 2, 1);
-	sendSTR_toLCD(&handlerLCD, "TOF [ms] = ");
-
-	// Etiquieta de tempo de distancia
-	moveCursor_inLCD(&handlerLCD, 3, 1);
-	sendSTR_toLCD(&handlerLCD, "Dist [cm] = ");
+	sendSTR_toLCD(&handlerLCD, "Vx [m/s] = ");
 
 	delay_ms(20);
 
@@ -157,11 +155,7 @@ int main (void){
 			sprintf(bufferTemp,"%.2f",temperature);
 			sprintf(bufferHum,"%.2f", humidity);
 
-			sprintf(bufferTOF, "%.6f", timeOfFlightAB*1000);
-			sprintf(bufferDist, "%.2f", distanceX1*100);
-
-//			sprintf(bufferTOF, "%.6f", timeOfFlightBA*1000);
-//			sprintf(bufferDist, "%.2f", distanceX2*100);
+			sprintf(bufferVx, "%.2f", Vx);
 
 			moveCursor_inLCD(&handlerLCD, 0, 12);
 			sendSTR_toLCD(&handlerLCD, bufferTemp);
@@ -170,10 +164,7 @@ int main (void){
 			sendSTR_toLCD(&handlerLCD, bufferHum);
 
 			moveCursor_inLCD(&handlerLCD, 2, 12);
-			sendSTR_toLCD(&handlerLCD, bufferTOF);
-
-			moveCursor_inLCD(&handlerLCD, 3, 13);
-			sendSTR_toLCD(&handlerLCD, bufferDist);
+			sendSTR_toLCD(&handlerLCD, bufferVx);
 
 			counterLCD = 0;
 		}
@@ -227,7 +218,7 @@ void initSystem(void){
 
 	/*	-	-	-	Timers	-	-	-	*/
 
-	// Configuracion del TIM2 para que haga un blinky cada 250ms
+	// Configuracion del TIM para que haga un blinky cada 250ms
 	handlerBlinkyTimer.ptrTIMx                               = TIM2;
 	handlerBlinkyTimer.TIMx_Config.TIMx_mode                 = BTIMER_MODE_UP;
 	handlerBlinkyTimer.TIMx_Config.TIMx_speed                = BTIMER_SPEED_100Mhz_100us;
@@ -353,12 +344,11 @@ void initSystem(void){
 	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinOPType					= GPIO_OTYPE_PUSHPULL;
 	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinPuPdControl			= GPIO_PUPDR_NOTHING;
 	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinSpeed					= GPIO_OSPEED_FAST;
-	handlerEchoFallX2.GPIO_PinConfig.GPIO_PinAltFunMode				= AF0;
 
 	handlerExtiEchoFallX1.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
 	handlerExtiEchoFallX1.pGPIOHandler		= &handlerEchoFallX1;
 
-	handlerExtiEchoFallX2.edgeType			= EXTERNAL_INTERRUPT_RISING_EDGE;
+	handlerExtiEchoFallX2.edgeType			= EXTERNAL_INTERRUPT_FALLING_EDGE;
 	handlerExtiEchoFallX2.pGPIOHandler		= &handlerEchoFallX2;
 
 	// Se cargan las configuraciones
@@ -452,18 +442,17 @@ void measureTOF_X1(void){
 	// Habilitamos la recepción de la Exti
 	flagExtiX1 = 1;
 	GPIO_WritePin(&handlerTrigX1, RESET);
-	StartTimer(&handlerSamplingTOF);
+	StartTimer(&handlerSamplingTOF); // INICIO DEL TIMER
 
 	delay_ms(5);
 
-	// Aquí la exti del echo detiene el conteo de tiempo
+	// Aquí la exti del echo de X1 para el timer
 
-	timeOfFlightAB = (200*stopwatch / 100000000);  // Factor de corrección experimental - 0.00040525;
+	timeOfFlightAB = (200*((float)stopwatch) / 100000000) - 0.00040525;  // Factor de corrección experimental
 
-	distanceX1 = (331+0.6*temperature)*timeOfFlightAB -0.008; // Factor de correción experimental
+	distanceX1 = (331+0.6*temperature)*timeOfFlightAB;
 
 	stopwatch = 0;
-
 	delay_ms(60);
 
 	// Pulso ultrasónico X-
@@ -476,13 +465,18 @@ void measureTOF_X1(void){
 
 	delay_ms(5);
 
-	// Aquí la exti del echo detiene el conteo de tiempo
+	// Aquí la exti del echo de X2 para el timer
 
-	timeOfFlightBA = (200*stopwatch / 100000000); // Factor de corrección experimental  - 0.00040525
+	timeOfFlightBA = (200*(float)2*stopwatch/ 100000000) - 0.00040525; // Factor de corrección experimental
 
-	distanceX2 = (331+0.6*temperature)*timeOfFlightBA -0.008; // Factor de correción experimental
-
+	distanceX2 = (331+0.6*temperature)*timeOfFlightBA;
 	stopwatch = 0;
+
+	Vx = (0.475 / 2)*((1 / timeOfFlightAB)-(1 / timeOfFlightBA));
+
+	if(Vx < 4){
+		Vx = 0;
+	}
 
 	delay_ms(60);
 }
@@ -510,7 +504,6 @@ void callback_extInt1(void){
 		StopTimer(&handlerSamplingTOF);
 		flagExtiX1 = 0;
 	}
-
 }
 
 void callback_extInt14(void){
