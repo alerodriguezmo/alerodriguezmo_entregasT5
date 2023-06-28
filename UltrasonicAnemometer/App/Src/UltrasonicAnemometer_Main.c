@@ -592,7 +592,7 @@ void measureTOF_X1(void){
 
 		// Aquí la exti del echo de Y1 para el timer
 
-		timeOfFlightCD = (200*(float)(stopwatch+430)/ 100000000) - 0.00040525; // Factor de corrección experimental
+		timeOfFlightCD = (200*(float)(stopwatch+436)/ 100000000) - 0.00040525; // Factor de corrección experimental
 
 		distanceY1 = (331+0.6*temperature)*timeOfFlightCD;
 		stopwatch = 0;
@@ -620,7 +620,7 @@ void measureTOF_X1(void){
 		stopwatch = 0;
 		delay_ms(40);
 
-		Vy = 1 + (0.475 / 2)*((1 / timeOfFlightDC)-(1 / timeOfFlightCD));
+		Vy = (0.46 / 2)*((1 / timeOfFlightDC)-(1 / timeOfFlightCD));
 		Vy_mean += Vy/4;
 
 	}
@@ -630,7 +630,9 @@ void measureTOF_X1(void){
 	Vy_mean = 0;
 
 	squares = (Vx_report*Vx_report)+(Vy_report*Vy_report);
-	arm_sqrt_f32(squares, &V);
+	if(squares < 400){
+		arm_sqrt_f32(squares, &V);
+	}
 
 	direction = atan(Vy_report / Vx_report)*180/M_PI;
 
