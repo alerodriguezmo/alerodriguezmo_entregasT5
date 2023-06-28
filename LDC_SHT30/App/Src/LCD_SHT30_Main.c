@@ -90,6 +90,8 @@ float distanceX1		= 0;
 float distanceX2		= 0;
 
 float Vx = 0;
+float Vx_mean = 0;
+float Vx_report = 0;
 
 uint8_t flagExtiX1 = 0;
 uint8_t flagExtiX2 = 0;
@@ -155,7 +157,7 @@ int main (void){
 			sprintf(bufferTemp,"%.2f",temperature);
 			sprintf(bufferHum,"%.2f", humidity);
 
-			sprintf(bufferVx, "%.2f", Vx);
+			sprintf(bufferVx, "%.2f", Vx_report);
 
 			moveCursor_inLCD(&handlerLCD, 0, 12);
 			sendSTR_toLCD(&handlerLCD, bufferTemp);
@@ -436,45 +438,50 @@ void resetSHT30(void){
 }
 
 void measureTOF_X1(void){
-	// Pulso ultrasónico X+
-	GPIO_WritePin(&handlerTrigX1, SET);
-	delay_ms(1);
-	// Habilitamos la recepción de la Exti
-	flagExtiX1 = 1;
-	GPIO_WritePin(&handlerTrigX1, RESET);
-	StartTimer(&handlerSamplingTOF); // INICIO DEL TIMER
+	for(int i = 0; i<4; i++){
+		// Pulso ultrasónico X+
+		GPIO_WritePin(&handlerTrigX1, SET);
+		delay_ms(1);
+		// Habilitamos la recepción de la Exti
+		flagExtiX1 = 1;
+		GPIO_WritePin(&handlerTrigX1, RESET);
+		StartTimer(&handlerSamplingTOF); // INICIO DEL TIMER
 
-	delay_ms(5);
+		delay_ms(5);
 
-	// Aquí la exti del echo de X1 para el timer
+		// Aquí la exti del echo de X1 para el timer
 
-	timeOfFlightAB = (200*((float)stopwatch) / 100000000) - 0.00040525;  // Factor de corrección experimental
+		timeOfFlightAB = (200*((float)stopwatch) / 100000000) - 0.00040525;  // Factor de corrección experimental
 
-	distanceX1 = (331+0.6*temperature)*timeOfFlightAB;
+		distanceX1 = (331+0.6*temperature)*timeOfFlightAB;
 
-	stopwatch = 0;
-	delay_ms(60);
+		stopwatch = 0;
+		delay_ms(60);
 
-	// Pulso ultrasónico X-
-	GPIO_WritePin(&handlerTrigX2, SET);
-	delay_ms(1);
-	// Habilitamos la recepción de la Exti
-	flagExtiX2 = 1;
-	GPIO_WritePin(&handlerTrigX2, RESET);
-	StartTimer(&handlerSamplingTOF);
+		// Pulso ultrasónico X-
+		GPIO_WritePin(&handlerTrigX2, SET);
+		delay_ms(1);
+		// Habilitamos la recepción de la Exti
+		flagExtiX2 = 1;
+		GPIO_WritePin(&handlerTrigX2, RESET);
+		StartTimer(&handlerSamplingTOF);
 
-	delay_ms(5);
+		delay_ms(5);
 
-	// Aquí la exti del echo de X2 para el timer
+		// Aquí la exti del echo de X2 para el timer
 
-	timeOfFlightBA = (200*(float)(stopwatch+432)/ 100000000) - 0.00040525; // Factor de corrección experimental
+		timeOfFlightBA = (200*(float)(stopwatch+432)/ 100000000) - 0.00040525; // Factor de corrección experimental
 
-	distanceX2 = (331+0.6*temperature)*timeOfFlightBA;
-	stopwatch = 0;
+		distanceX2 = (331+0.6*temperature)*timeOfFlightBA;
+		stopwatch = 0;
 
-	Vx = (0.475 / 2)*((1 / timeOfFlightAB)-(1 / timeOfFlightBA));
+		Vx = (0.475 / 2)*((1 / timeOfFlightBA)-(1 / timeOfFlightAB));
+		Vx_mean += Vx/4;
 
-	delay_ms(60);
+		delay_ms(60);
+	}
+	Vx_report = Vx_mean;
+	Vx_mean = 0;
 }
 
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
