@@ -467,16 +467,12 @@ void measureTOF_X1(void){
 
 	// Aquí la exti del echo de X2 para el timer
 
-	timeOfFlightBA = (200*(float)2*stopwatch/ 100000000) - 0.00040525; // Factor de corrección experimental
+	timeOfFlightBA = (200*(float)(stopwatch+432)/ 100000000) - 0.00040525; // Factor de corrección experimental
 
 	distanceX2 = (331+0.6*temperature)*timeOfFlightBA;
 	stopwatch = 0;
 
 	Vx = (0.475 / 2)*((1 / timeOfFlightAB)-(1 / timeOfFlightBA));
-
-	if(Vx < 4){
-		Vx = 0;
-	}
 
 	delay_ms(60);
 }
