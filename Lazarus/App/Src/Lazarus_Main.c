@@ -627,40 +627,39 @@ void measureTOF_X(void){
 
 	timeOfFlightBA = (200*((float)stopwatch_two+6520)) / (1000000000); // Correcíon experimental
 
-	Vx = (0.465/2)*((1/timeOfFlightBA) - (1/timeOfFlightAB));
+	Vx = (0.465/2)*((1/timeOfFlightAB) - (1/timeOfFlightBA));
 
 	stopwatch_one = 0;
 	stopwatch_two = 0;
 
 	delay_ms(60); // Delay entre mediciones recomendado por el fabricante
-//
-//	// Se habiltan las exti correspondientes al eje Y. Los callbacks las desactivan.
-//	flagExtiY1_rise = 1;
-//	flagExtiY1_fall = 1;
-//
-//	flagExtiY2_rise = 1;
-//	flagExtiY2_fall = 1;
-//
-//	// Se activan los pulos ultrasónicos del eje X.
-//	GPIO_WritePin(&handlerTrigY, SET);
-//	delay_ms(1);
-//	GPIO_WritePin(&handlerTrigY, RESET);
-//
-//	delay_ms(5);
-//
-//	// Aquí la exti de los echo empiezan y paran los timers correspondientes
-//
-//	timeOfFlightAB = (200*((float)stopwatch_one)) / (100000000000) + 0.0001; // Correcíon experimental
-//
-//	timeOfFlightBA = (200*((float)stopwatch_two)) / (100000000000) + 0.0001; // Correcíon experimental
-//
-//	delta = timeOfFlightBA-timeOfFlightAB;
-//
-//	Vx = (0.465/2)*((1/timeOfFlightBA) - (1/timeOfFlightAB));
-//
-//	stopwatch_one = 0;
-//	stopwatch_two = 0;
 
+	// Se habiltan las exti correspondientes al eje Y. Los callbacks las desactivan.
+	flagExtiY1_rise = 1;
+	flagExtiY1_fall = 1;
+
+	flagExtiY2_rise = 1;
+	flagExtiY2_fall = 1;
+
+	// Se activan los pulos ultrasónicos del eje Y.
+	GPIO_WritePin(&handlerTrigY, SET);
+	delay_ms(1);
+	GPIO_WritePin(&handlerTrigY, RESET);
+
+	delay_ms(5);
+
+	// Aquí la exti de los echo empiezan y paran los timers correspondientes
+
+	timeOfFlightCD = (200*((float)stopwatch_one)) / (100000000000) + 0.0001; // Correcíon experimental
+
+	timeOfFlightDC = (200*((float)stopwatch_two)) / (100000000000) + 0.0001; // Correcíon experimental
+
+	Vy = (0.465/2)*((1/timeOfFlightDC) - (1/timeOfFlightCD));
+
+	stopwatch_one = 0;
+	stopwatch_two = 0;
+
+	delay_ms(60); // Delay entre mediciones recomendado por el fabricante
 }
 
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
@@ -719,13 +718,37 @@ void callback_extInt2(void){
 	}
 }
 
-//// CALLBACKS EJE Y
-//void callback_extInt5(void){
-//	if(flagExtiY1_rise){
-//		// Exti del rising edge del echo de Y1 (PB5). Inicia el timer de TOF one
-//		StartTimer(&handlerSamplingTOF_two);
-//		flagExtiX2_fall = 0;
-//	}
-//}
+// CALLBACKS EJE Y
+void callback_extInt1(void){
+	if(flagExtiY1_rise){
+		// Exti del rising edge del echo de Y1 (PC1). Inicia el timer de TOF one
+		StartTimer(&handlerSamplingTOF_one);
+		flagExtiY1_rise = 0;
+	}
+}
+
+void callback_extInt5(void){
+	if(flagExtiY2_rise){
+		// Exti del rising edge del echo de Y2 (PB5). Inicia el timer de TOF one
+		StartTimer(&handlerSamplingTOF_two);
+		flagExtiY2_rise = 0;
+	}
+}
+
+void callback_extInt0(void){
+	if(flagExtiY1_fall){
+		// Exti del falling edge del echo de Y1 (PB0). Para el timer de TOF one
+		StopTimer(&handlerSamplingTOF_one);
+		flagExtiY1_fall = 0;
+	}
+}
+
+void callback_extInt4(void){
+	if(flagExtiY2_fall){
+		// Exti del falling edge del echo de Y2 (PB4). Para el timer de TOF two
+		StopTimer(&handlerSamplingTOF_two);
+		flagExtiY2_fall = 0;
+	}
+}
 
 /*	=	=	=	FIN DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
