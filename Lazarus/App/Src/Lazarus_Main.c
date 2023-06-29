@@ -50,6 +50,12 @@ GPIO_Handler_t handlerI2cLcdSDA 	= {0};
 I2C_Handler_t handlerSHT30 			= {0};
 I2C_Handler_t handlerLCD 			= {0};
 
+// Handlers de la comunicacion serial
+GPIO_Handler_t handlerPinTX 			= {0};
+GPIO_Handler_t handlerPinRX 			= {0};
+
+USART_Handler_t handlerCommTerminal 	= {0};
+
 // Handlers de los pines Trigger de los HC-SR04
 GPIO_Handler_t handlerTrigX		= {0};
 
@@ -101,6 +107,10 @@ uint8_t counterSampling = 0;
 
 uint8_t i2cBuffer 		= {0};
 
+// Variables para la comunicación serial
+uint8_t rxData = 0;
+char bufferData[64];
+
 // Variables para la implementación de los sensores ultrasónicos HC-SR04
 char bufferTOFAB[64];
 char bufferTOFBA[64];
@@ -118,17 +128,18 @@ float distanceY1		= 0;
 float distanceY2		= 0;
 
 float Vx = 0;
+float Vx_data[32];
 float Vx_mean = 0;
-float Vx_report = 0;
 
 float Vy = 0;
+float Vy_data[32];
 float Vy_mean = 0;
-float Vy_report = 0;
 
 float32_t squares = 0;
 
 float32_t V = 0;
 float direction = 0;
+
 
 
 uint8_t flagExtiX1_rise = 0;
@@ -147,10 +158,10 @@ uint8_t flagExtiY2_fall = 0;
 /*	-	-	-	Definición de las cabeceras de las funciones	-	-	-	*/
 void tuneMCU(void);
 void initSystem(void);
-void parseCommands(char *ptrBufferReception);
 void measureTemp_Hum(void);
 void resetSHT30(void);
-void measureTOF_X(void);
+void measureTOF(void);
+float calculate_mean(const float* data, uint32_t length);
 /*	=	=	=	INICIO DEL MAIN	=	=	=	*/
 int main (void){
 
@@ -177,20 +188,21 @@ int main (void){
 	// Esctirura de los caracteres permanentes
 
 	// Etiquieta uno
-	moveCursor_inLCD(&handlerLCD, 0, 1);
+	moveCursor_inLCD(&handlerLCD, 0, 0);
+	sendSTR_toLCD(&handlerLCD, "USE SERIAL TERMINAL");
+
+	// Etiquieta dos
+	moveCursor_inLCD(&handlerLCD, 1, 1);
+	sendSTR_toLCD(&handlerLCD, "FOR AIRSPEED INFO");
+
+	// Etiquieta tres
+	moveCursor_inLCD(&handlerLCD, 2, 1);
 	sendSTR_toLCD(&handlerLCD, "Temp [C] = ");
 
-	// Etiquieta de humedad relativa
-	moveCursor_inLCD(&handlerLCD, 1, 1);
+	// Etiquieta cuatro
+	moveCursor_inLCD(&handlerLCD, 3, 1);
 	sendSTR_toLCD(&handlerLCD, "RH [%] = ");
 
-	// Etiquieta de tempo de vuelo
-	moveCursor_inLCD(&handlerLCD, 2, 1);
-	sendSTR_toLCD(&handlerLCD, "Vx [ms] = ");
-
-	// Etiquieta de tempo de vuelo
-//	moveCursor_inLCD(&handlerLCD, 3, 1);
-//	sendSTR_toLCD(&handlerLCD, "TOF BA [ms] = ");
 
 	delay_ms(20);
 
@@ -198,7 +210,6 @@ int main (void){
 
 		// Ciclo que muestrea temperatura y humedad
 		if(counterSampling > 4){
-			measureTOF_X();
 			measureTemp_Hum();
 			counterSampling = 0;
 		}
@@ -208,26 +219,112 @@ int main (void){
 			sprintf(bufferTemp,"%.2f",temperature);
 			sprintf(bufferHum,"%.2f", humidity);
 
-			sprintf(bufferTOFAB, "%.2f", timeOfFlightAB*1000);
-			sprintf(bufferTOFBA, "%.2f", timeOfFlightBA*1000);
-
-			sprintf(bufferVx, "%.2f", Vx);
-
-			moveCursor_inLCD(&handlerLCD, 0, 12);
+			moveCursor_inLCD(&handlerLCD, 2, 12);
 			sendSTR_toLCD(&handlerLCD, bufferTemp);
 
-			moveCursor_inLCD(&handlerLCD, 1, 11);
+			moveCursor_inLCD(&handlerLCD, 3, 11);
 			sendSTR_toLCD(&handlerLCD, bufferHum);
-
-			moveCursor_inLCD(&handlerLCD, 2, 11);
-			sendSTR_toLCD(&handlerLCD, bufferVx);
-
-//			moveCursor_inLCD(&handlerLCD, 3, 15);
-//			sendSTR_toLCD(&handlerLCD, bufferTOFBA);
 
 			counterLCD = 0;
 		}
 
+		// Hacemos un "eco" con el valor que nos llega por el puerto serial
+
+		if(rxData != '\0'){
+			// Sección de ayuda donde se muestran los diferentes comandos disponibles (help)
+			if(rxData == 'h'){
+				writeMsg(&handlerCommTerminal, "HELP MENU: \n"
+						"h -> List of available commands \n"
+						"x -> Sample for 5 seconds and calculate airspeed in x-axis \n"
+						"y -> Sample for 5 seconds and calculate airspeed in y-axis \n"
+						"s -> Sample both axes for 5 seconds and calculate airspeed magnitude \n"
+						"d -> Sample for 5 seconds and calculate airspeed's general direction \n" );
+			    rxData = '\0';
+			}
+			// Muestreo en el eje X
+			else if (rxData == 'x'){
+				sprintf(bufferData, "Sampling airspeed in x-axis... \n");
+				writeMsg(&handlerCommTerminal, bufferData);
+				measureTOF();
+
+				sprintf(bufferData, "Airspeed in x-axis: %.2f m/s \n", calculate_mean(Vx_data, 32));
+				writeMsg(&handlerCommTerminal, bufferData);
+				rxData = '\0';
+			}
+			// Muestreo en el eje Y
+			else if(rxData == 'y'){
+				sprintf(bufferData, "Sampling airspeed in y-axis... \n");
+				writeMsg(&handlerCommTerminal, bufferData);
+				measureTOF();
+
+				sprintf(bufferData, "Airspeed in y-axis: %.2f m/s \n", calculate_mean(Vy_data, 32));
+				writeMsg(&handlerCommTerminal, bufferData);
+				rxData = '\0';
+			}
+			// Muestreo de la magnitud
+			else if(rxData == 's'){
+				sprintf(bufferData, "Sampling airspeed magnitude... \n");
+				writeMsg(&handlerCommTerminal, bufferData);
+				measureTOF();
+
+				Vx_mean = calculate_mean(Vx_data, 32);
+				Vy_mean = calculate_mean(Vy_data, 32);
+
+				squares = (Vx_mean*Vx_mean)+(Vy_mean*Vy_mean);
+
+				arm_sqrt_f32(squares, &V);
+
+				sprintf(bufferData, "Airspeed: %.2f m/s \n", V);
+				writeMsg(&handlerCommTerminal, bufferData);
+				rxData = '\0';
+			}
+			// Muestreo de la dirección
+			else if(rxData == 'd'){
+				sprintf(bufferData, "Sampling airspeed's general direction... \n");
+				writeMsg(&handlerCommTerminal, bufferData);
+				measureTOF();
+
+				Vx_mean = calculate_mean(Vx_data, 32);
+				Vy_mean = calculate_mean(Vy_data, 32);
+
+				direction = atan(Vy_mean / Vx_mean)*(180/M_PI);
+
+				if (direction > -10 && direction < 10){
+					sprintf(bufferData, "Wind is coming from the North \n");
+					writeMsg(&handlerCommTerminal, bufferData);
+				}
+				else if (direction > 10 && direction < 80){
+					sprintf(bufferData, "Wind is coming from the Northeast \n");
+					writeMsg(&handlerCommTerminal, bufferData);
+				}
+				else if (direction > 80 && direction < 100){
+					sprintf(bufferData, "Wind is coming from the East \n");
+					writeMsg(&handlerCommTerminal, bufferData);
+				}
+				else if (direction > 100 && direction < 170){
+					sprintf(bufferData, "Wind is coming from the Southeast \n");
+					writeMsg(&handlerCommTerminal, bufferData);
+				}
+				else if ((direction >= -180 && direction <= -170) || (direction >= 170 && direction <= 180)){
+					sprintf(bufferData, "Wind is coming from the South \n");
+					writeMsg(&handlerCommTerminal, bufferData);
+				}
+				else if (direction > -170 && direction < -100){
+					sprintf(bufferData, "Wind is coming from the Southwest \n");
+					writeMsg(&handlerCommTerminal, bufferData);
+				}
+				else if (direction > -100 && direction < -80){
+					sprintf(bufferData, "Wind is coming from the West \n");
+					writeMsg(&handlerCommTerminal, bufferData);
+				}
+				else if (direction > -80 && direction < -10){
+					sprintf(bufferData, "Wind is coming from the Northwest \n");
+					writeMsg(&handlerCommTerminal, bufferData);
+				}
+				rxData = '\0';
+			}
+
+		}
 	}
 	return(0);
 }
@@ -368,6 +465,36 @@ void initSystem(void){
 	handlerLCD.modeI2C_FM						  = I2C_MODE_FM_SPEED_400KHz_100MHz;
 
 	i2c_config(&handlerLCD);
+
+	/*	-	-	-	Comunicación serial	-	-	-	*/
+	handlerPinTX.pGPIOx                               = GPIOC;
+	handlerPinTX.GPIO_PinConfig.GPIO_PinNumber        = PIN_6;
+	handlerPinTX.GPIO_PinConfig.GPIO_PinMode          = GPIO_MODE_ALTFN;
+	handlerPinTX.GPIO_PinConfig.GPIO_PinAltFunMode    = AF8;
+
+	// Se carga la configuración
+	GPIO_Config(&handlerPinTX);
+
+	handlerPinRX.pGPIOx                               = GPIOC;
+	handlerPinRX.GPIO_PinConfig.GPIO_PinNumber        = PIN_7;
+	handlerPinRX.GPIO_PinConfig.GPIO_PinMode          = GPIO_MODE_ALTFN;
+	handlerPinRX.GPIO_PinConfig.GPIO_PinAltFunMode    = AF8;
+
+	// Se carga la configuración
+	GPIO_Config(&handlerPinRX);
+
+	handlerCommTerminal.ptrUSARTx                       = USART6;
+	handlerCommTerminal.USART_Config.USART_baudrate     = USART_BAUDRATE_115200;
+	handlerCommTerminal.USART_Config.USART_datasize     = USART_DATASIZE_8BIT;
+	handlerCommTerminal.USART_Config.USART_parity       = USART_PARITY_NONE;
+	handlerCommTerminal.USART_Config.USART_stopbits     = USART_STOPBIT_1;
+	handlerCommTerminal.USART_Config.USART_mode         = USART_MODE_RXTX;
+	handlerCommTerminal.USART_Config.USART_enableIntRX  = USART_RX_INTERRUP_ENABLE;
+	handlerCommTerminal.USART_Config.USART_enableIntTX  = USART_TX_INTERRUP_DISABLE;
+	handlerCommTerminal.USART_Config.USART_frequency    = 100;
+
+	// Se carga la configuración
+	USART_Config(&handlerCommTerminal);
 
 	/*	-	-	-	Pines Trigger de los HC-SR04	-	-	-	*/
 
@@ -605,62 +732,81 @@ void resetSHT30(void){
 
 }
 
-void measureTOF_X(void){
+void measureTOF(void){
+	for(int i = 0; i < 32; i++){
 
-	// Se habiltan las exti correspondientes al eje X. Los callbacks las desactivan.
-	flagExtiX1_rise = 1;
-	flagExtiX1_fall = 1;
+		// Se habiltan las exti correspondientes al eje X. Los callbacks las desactivan.
+		flagExtiX1_rise = 1;
+		flagExtiX1_fall = 1;
 
-	flagExtiX2_rise = 1;
-	flagExtiX2_fall = 1;
+		flagExtiX2_rise = 1;
+		flagExtiX2_fall = 1;
 
-	// Se activan los pulos ultrasónicos del eje X.
-	GPIO_WritePin(&handlerTrigX, SET);
-	delay_ms(1);
-	GPIO_WritePin(&handlerTrigX, RESET);
+		// Se activan los pulos ultrasónicos del eje X.
+		GPIO_WritePin(&handlerTrigX, SET);
+		delay_ms(1);
+		GPIO_WritePin(&handlerTrigX, RESET);
 
-	delay_ms(5);
+		delay_ms(5);
 
-	// Aquí la exti de los echo empiezan y paran los timers correspondientes
+		// Aquí la exti de los echo empiezan y paran los timers correspondientes
 
-	timeOfFlightAB = (200*((float)stopwatch_one+6520)) / (1000000000); // + 0.0001 Correcíon experimental
+		timeOfFlightAB = (200*((float)stopwatch_one+6520)) / (1000000000); // + 0.0001 Correcíon experimental
 
-	timeOfFlightBA = (200*((float)stopwatch_two+6520)) / (1000000000); // Correcíon experimental
+		timeOfFlightBA = (200*((float)stopwatch_two+6520)) / (1000000000); // Correcíon experimental
 
-	Vx = (0.465/2)*((1/timeOfFlightAB) - (1/timeOfFlightBA));
+		Vx = (0.465/2)*((1/timeOfFlightAB) - (1/timeOfFlightBA));
 
-	stopwatch_one = 0;
-	stopwatch_two = 0;
+		Vx_data[i] = Vx;
 
-	delay_ms(60); // Delay entre mediciones recomendado por el fabricante
+		stopwatch_one = 0;
+		stopwatch_two = 0;
 
-	// Se habiltan las exti correspondientes al eje Y. Los callbacks las desactivan.
-	flagExtiY1_rise = 1;
-	flagExtiY1_fall = 1;
+		delay_ms(60); // Delay entre mediciones recomendado por el fabricante
 
-	flagExtiY2_rise = 1;
-	flagExtiY2_fall = 1;
+		// Se habiltan las exti correspondientes al eje Y. Los callbacks las desactivan.
+		flagExtiY1_rise = 1;
+		flagExtiY1_fall = 1;
 
-	// Se activan los pulos ultrasónicos del eje Y.
-	GPIO_WritePin(&handlerTrigY, SET);
-	delay_ms(1);
-	GPIO_WritePin(&handlerTrigY, RESET);
+		flagExtiY2_rise = 1;
+		flagExtiY2_fall = 1;
 
-	delay_ms(5);
+		// Se activan los pulos ultrasónicos del eje Y.
+		GPIO_WritePin(&handlerTrigY, SET);
+		delay_ms(1);
+		GPIO_WritePin(&handlerTrigY, RESET);
 
-	// Aquí la exti de los echo empiezan y paran los timers correspondientes
+		delay_ms(5);
 
-	timeOfFlightCD = (200*((float)stopwatch_one)) / (100000000000) + 0.0001; // Correcíon experimental
+		// Aquí la exti de los echo empiezan y paran los timers correspondientes
 
-	timeOfFlightDC = (200*((float)stopwatch_two)) / (100000000000) + 0.0001; // Correcíon experimental
+		timeOfFlightCD = (200*((float)stopwatch_one)) / (100000000000) + 0.0001; // Correcíon experimental
 
-	Vy = (0.465/2)*((1/timeOfFlightDC) - (1/timeOfFlightCD));
+		timeOfFlightDC = (200*((float)stopwatch_two)) / (100000000000) + 0.0001; // Correcíon experimental
 
-	stopwatch_one = 0;
-	stopwatch_two = 0;
+		Vy = (0.465/2)*((1/timeOfFlightDC) - (1/timeOfFlightCD));
 
-	delay_ms(60); // Delay entre mediciones recomendado por el fabricante
+		Vy_data[i] = Vx;
+
+		stopwatch_one = 0;
+		stopwatch_two = 0;
+
+		delay_ms(60); // Delay entre mediciones recomendado por el fabricante
+	}
 }
+float calculate_mean(const float* data, uint32_t length) {
+    if (length == 0) {
+        return 0.0f;  // Handle zero-length array
+    }
+
+    float sum = 0.0f;
+    for (uint32_t i = 0; i < length; i++) {
+        sum += data[i];
+    }
+
+    return sum / length;
+}
+
 
 /*	=	=	=	FIN DE LA DEFINICIÓN DE FUNCIONES	=	=	=	*/
 
@@ -751,4 +897,8 @@ void callback_extInt4(void){
 	}
 }
 
+// Callback del usart
+void usart6Rx_Callback(void){
+	rxData = getRxData();
+}
 /*	=	=	=	FIN DE LAS RUTINAS DE ATENCIÓN (Callbacks)	=	=	=	*/
