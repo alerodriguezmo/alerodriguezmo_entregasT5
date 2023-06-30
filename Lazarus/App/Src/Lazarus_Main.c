@@ -135,6 +135,11 @@ float Vy = 0;
 float Vy_data[32];
 float Vy_mean = 0;
 
+float tofAB_data[32];
+float tofBA_data[32];
+float tofCD_data[32];
+float tofDC_data[32];
+
 float32_t squares = 0;
 
 float32_t V = 0;
@@ -192,8 +197,8 @@ int main (void){
 	sendSTR_toLCD(&handlerLCD, "USE SERIAL TERMINAL");
 
 	// Etiquieta dos
-	moveCursor_inLCD(&handlerLCD, 1, 1);
-	sendSTR_toLCD(&handlerLCD, "FOR AIRSPEED INFO");
+	moveCursor_inLCD(&handlerLCD, 1, 0);
+	sendSTR_toLCD(&handlerLCD, "FOR WIND SPEED INFO");
 
 	// Etiquieta tres
 	moveCursor_inLCD(&handlerLCD, 2, 1);
@@ -235,10 +240,11 @@ int main (void){
 			if(rxData == 'h'){
 				writeMsg(&handlerCommTerminal, "HELP MENU: \n"
 						"h -> List of available commands \n"
-						"x -> Sample for 5 seconds and calculate airspeed in x-axis \n"
-						"y -> Sample for 5 seconds and calculate airspeed in y-axis \n"
-						"s -> Sample both axes for 5 seconds and calculate airspeed magnitude \n"
-						"d -> Sample for 5 seconds and calculate airspeed's general direction \n" );
+						"x -> Sample and calculate wind speed in x-axis \n"
+						"y -> Sample and calculate wind speed in y-axis \n"
+						"s -> Sample both axes and calculate wind speed magnitude \n"
+						"d -> Sample and calculate wind's general direction \n"
+						"t -> Sample and show information about times of flight and distances \n");
 			    rxData = '\0';
 			}
 			// Muestreo en el eje X
@@ -323,7 +329,33 @@ int main (void){
 				}
 				rxData = '\0';
 			}
+			else if(rxData == 't'){
+				sprintf(bufferData, "Sampling... \n");
+				writeMsg(&handlerCommTerminal, bufferData);
+				measureTOF();
 
+				sprintf(bufferData, "Time of flight for X1: %.5f ms \n", calculate_mean(tofAB_data, 32)*1000);
+				writeMsg(&handlerCommTerminal, bufferData);
+				sprintf(bufferData, "Distance measured by X1: %.2f cm \n", calculate_mean(tofAB_data, 32)*348*100);
+				writeMsg(&handlerCommTerminal, bufferData);
+
+				sprintf(bufferData, "Time of flight for X2: %.5f ms \n", calculate_mean(tofBA_data, 32)*1000);
+				writeMsg(&handlerCommTerminal, bufferData);
+				sprintf(bufferData, "Distance measured by X2: %.2f cm \n", calculate_mean(tofBA_data, 32)*348*100);
+				writeMsg(&handlerCommTerminal, bufferData);
+
+				sprintf(bufferData, "Time of flight for Y1: %.5f ms \n", calculate_mean(tofCD_data, 32)*1000);
+				writeMsg(&handlerCommTerminal, bufferData);
+				sprintf(bufferData, "Distance measured by Y1: %.2f cm \n", calculate_mean(tofCD_data, 32)*348*100);
+				writeMsg(&handlerCommTerminal, bufferData);
+
+				sprintf(bufferData, "Time of flight for Y2: %.5f ms \n", calculate_mean(tofDC_data, 32)*1000);
+				writeMsg(&handlerCommTerminal, bufferData);
+				sprintf(bufferData, "Distance measured by Y2: %.2f cm \n", calculate_mean(tofDC_data, 32)*348*100);
+				writeMsg(&handlerCommTerminal, bufferData);
+
+				rxData = '\0';
+			}
 		}
 	}
 	return(0);
@@ -751,13 +783,16 @@ void measureTOF(void){
 
 		// Aquí la exti de los echo empiezan y paran los timers correspondientes
 
-		timeOfFlightAB = (200*((float)stopwatch_one+6520)) / (1000000000); // + 0.0001 Correcíon experimental
+		timeOfFlightAB = (200*((float)stopwatch_one+6520)) / (1000000000);
 
-		timeOfFlightBA = (200*((float)stopwatch_two+6520)) / (1000000000); // Correcíon experimental
+		timeOfFlightBA = (200*((float)stopwatch_two+6520)) / (1000000000);
 
 		Vx = (0.465/2)*((1/timeOfFlightAB) - (1/timeOfFlightBA));
 
 		Vx_data[i] = Vx;
+
+		tofAB_data[i] = timeOfFlightAB;
+		tofBA_data[i] = timeOfFlightBA;
 
 		stopwatch_one = 0;
 		stopwatch_two = 0;
@@ -780,13 +815,16 @@ void measureTOF(void){
 
 		// Aquí la exti de los echo empiezan y paran los timers correspondientes
 
-		timeOfFlightCD = (200*((float)stopwatch_one)) / (100000000000) + 0.0001; // Correcíon experimental
+		timeOfFlightCD = (200*((float)stopwatch_one+6520)) / (1000000000); // Correcíon experimental
 
-		timeOfFlightDC = (200*((float)stopwatch_two)) / (100000000000) + 0.0001; // Correcíon experimental
+		timeOfFlightDC = (200*((float)stopwatch_two+6520)) / (1000000000); // Correcíon experimental
 
 		Vy = (0.465/2)*((1/timeOfFlightDC) - (1/timeOfFlightCD));
 
 		Vy_data[i] = Vx;
+
+		tofCD_data[i] = timeOfFlightCD;
+		tofDC_data[i] = timeOfFlightDC;
 
 		stopwatch_one = 0;
 		stopwatch_two = 0;
